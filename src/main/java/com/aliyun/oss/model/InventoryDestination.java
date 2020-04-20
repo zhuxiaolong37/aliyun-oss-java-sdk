@@ -53,7 +53,7 @@ public class InventoryDestination implements Serializable {
      * of where inventory results are published.
      * And returns the {@link InventoryDestination} object itself.
      */
-    public InventoryDestination withS3BucketDestination(InventoryOSSBucketDestination ossBucketDestination) {
+    public InventoryDestination withOSSBucketDestination(InventoryOSSBucketDestination ossBucketDestination) {
         setOssBucketDestination(ossBucketDestination);
         return this;
     }
