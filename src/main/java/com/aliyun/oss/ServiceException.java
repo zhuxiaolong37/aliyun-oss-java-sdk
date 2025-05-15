@@ -19,6 +19,8 @@
 
 package com.aliyun.oss;
 
+import java.util.Map;
+
 /**
  * <p>
  * This is the base exception class to represent any expected or unexpected OSS
@@ -57,8 +59,11 @@ public class ServiceException extends RuntimeException {
     private String errorCode;
     private String requestId;
     private String hostId;
+    private String ec;
 
     private String rawResponseError;
+
+    private Map<String, String> errorFields;
 
     /**
      * Creates a default instance.
@@ -154,11 +159,36 @@ public class ServiceException extends RuntimeException {
      */
     public ServiceException(String errorMessage, String errorCode, String requestId, String hostId,
             String rawResponseError, Throwable cause) {
+        this(errorMessage, errorCode, requestId, hostId, rawResponseError, cause, null);
+    }
+
+    /**
+     * Creates an instance with error message, error code, request id, host id,
+     * OSS response error, and a Throwable instance.
+     *
+     * @param errorMessage
+     *            Error message.
+     * @param errorCode
+     *            Error code.
+     * @param requestId
+     *            Request Id.
+     * @param hostId
+     *            Host Id.
+     * @param rawResponseError
+     *            OSS error message in response.
+     * @param cause
+     *            A {@link Throwable} instance indicates a specific exception.
+     * @param ec
+     *            OSS error code in XXXX-XXXXXXXX format.
+     */
+    public ServiceException(String errorMessage, String errorCode, String requestId, String hostId,
+                            String rawResponseError, Throwable cause, String ec) {
         this(errorMessage, cause);
         this.errorCode = errorCode;
         this.requestId = requestId;
         this.hostId = hostId;
         this.rawResponseError = rawResponseError;
+        this.ec = ec;
     }
 
     /**
@@ -216,6 +246,15 @@ public class ServiceException extends RuntimeException {
         this.rawResponseError = rawResponseError;
     }
 
+    /**
+     * Gets the ec.
+     *
+     * @return The ec in string.
+     */
+    public String getEC() {
+        return ec;
+    }
+
     private String formatRawResponseError() {
         if (rawResponseError == null || rawResponseError.equals("")) {
             return "";
@@ -223,9 +262,22 @@ public class ServiceException extends RuntimeException {
         return String.format("\n[ResponseError]:\n%s", this.rawResponseError);
     }
 
+    public Map<String, String> getErrorFields() {
+        return errorFields;
+    }
+
+    public void setErrorFields(Map<String, String> errorFields) {
+        this.errorFields = errorFields;
+    }
+
     @Override
     public String getMessage() {
-        return getErrorMessage() + "\n[ErrorCode]: " + getErrorCode() + "\n[RequestId]: " + getRequestId()
-                + "\n[HostId]: " + getHostId() + formatRawResponseError();
+        String msg = getErrorMessage() + "\n[ErrorCode]: " + getErrorCode() + "\n[RequestId]: " + getRequestId()
+                + "\n[HostId]: " + getHostId();
+
+        if (ec != null) {
+            msg += "\n[EC]: " + getEC();
+        }
+        return msg + formatRawResponseError();
     }
 }

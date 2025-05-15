@@ -39,7 +39,7 @@ public class BucketWebsiteTest extends TestBase {
 
     @Test
     public void testNormalSetBucketWebsite() {
-        final String bucketName = super.bucketName + "normal-set-bucket-website";
+        final String bucketName = genBucketName() + "-website";
         final String indexDocument = "index.html";
         final String errorDocument = "error.html";
 
@@ -84,7 +84,7 @@ public class BucketWebsiteTest extends TestBase {
 
     @Test
     public void testNormalSetBucketWebsiteWithMirror() {
-        final String bucketName = super.bucketName + "normal-set-bucket-website-mirror";
+        final String bucketName = genBucketName() + "-website-mirror";
         final String indexDocument = "index.html";
 
         try {
@@ -229,7 +229,7 @@ public class BucketWebsiteTest extends TestBase {
 
     @Test
     public void testNormalSetBucketWebsiteWithRedirect() {
-        final String bucketName = super.bucketName + "normal-set-bucket-website-redirect";
+        final String bucketName = genBucketName() + "-website-redirect";
         final String indexDocument = "index.html";
 
         try {
@@ -332,7 +332,7 @@ public class BucketWebsiteTest extends TestBase {
 
     @Test
     public void testNormalSetBucketWebsiteWithCDNRedirect() {
-        final String bucketName = super.bucketName + "normal-set-bucket-website-redirect-cdn";
+        final String bucketName = genBucketName() + "-website-redirect-cdn";
         final String indexDocument = "index.html";
 
         try {
@@ -434,7 +434,7 @@ public class BucketWebsiteTest extends TestBase {
 
     @Test
     public void testUnormalSetBucketWebsiteWithMirror() {
-        final String bucketName = super.bucketName + "unormal-set-bucket-website-mirror";
+        final String bucketName = genBucketName() + "-website-mirror";
         final String indexDocument = "index.html";
 
         try {
@@ -514,7 +514,7 @@ public class BucketWebsiteTest extends TestBase {
 
     @Test
     public void testUnormalSetBucketWebsiteWithRedirect() {
-        final String bucketName = super.bucketName + "unormal-set-bucket-website-redirect";
+        final String bucketName = genBucketName() + "-website-redirect";
         final String indexDocument = "index.html";
 
         try {
@@ -578,7 +578,7 @@ public class BucketWebsiteTest extends TestBase {
 
     @Test
     public void testUnormalSetBucketWebsite() {
-        final String bucketName = super.bucketName + "unormal-set-bucket-website";
+        final String bucketName = genBucketName() + "-bucket-website";
         final String indexDocument = "index.html";
         final String errorDocument = "error.html";
 
@@ -618,7 +618,7 @@ public class BucketWebsiteTest extends TestBase {
     @Test
     public void testUnormalGetBucketWebsite() {
         // Get non-existent bucket
-        final String nonexistentBucket = super.bucketName + "unormal-get-bucket-website";
+        final String nonexistentBucket = genBucketName() + "-website";
         try {
             ossClient.getBucketWebsite(nonexistentBucket);
             Assert.fail("Get bucket website should not be successful");
@@ -628,7 +628,7 @@ public class BucketWebsiteTest extends TestBase {
         }
 
         // Get bucket without ownership
-        final String bucketWithoutOwnership = "oss";
+        final String bucketWithoutOwnership = "oss" + NOT_OWNERSHIP_BUCKET_SUFFIX;
         try {
             ossClient.getBucketLogging(bucketWithoutOwnership);
             Assert.fail("Get bucket website should not be successful");
@@ -637,7 +637,7 @@ public class BucketWebsiteTest extends TestBase {
         }
 
         // Get bucket without setting website configuration
-        final String bucketWithoutWebsiteConfiguration = "bucket-without-website-configuration";
+        final String bucketWithoutWebsiteConfiguration =  genBucketName() + "-configuration";
         try {
             ossClient.createBucket(bucketWithoutWebsiteConfiguration);
 
@@ -654,7 +654,7 @@ public class BucketWebsiteTest extends TestBase {
     @Test
     public void testUnormalDeleteBucketWebsite() {
         // Delete non-existent bucket
-        final String nonexistentBucket = super.bucketName + "unormal-delete-bucket-website";
+        final String nonexistentBucket = genBucketName() + "-website";
         try {
             ossClient.deleteBucketWebsite(nonexistentBucket);
             Assert.fail("Delete bucket website should not be successful");
@@ -664,7 +664,7 @@ public class BucketWebsiteTest extends TestBase {
         }
 
         // Delete bucket without ownership
-        final String bucketWithoutOwnership = "oss";
+        final String bucketWithoutOwnership = "oss" + NOT_OWNERSHIP_BUCKET_SUFFIX;
         try {
             ossClient.deleteBucketWebsite(bucketWithoutOwnership);
             Assert.fail("Delete bucket website should not be successful");
@@ -673,7 +673,7 @@ public class BucketWebsiteTest extends TestBase {
         }
 
         // Delete bucket without setting website configuration
-        final String bucketWithoutWebsiteConfiguration = "bucket-without-website-configuration";
+        final String bucketWithoutWebsiteConfiguration = genBucketName() + "-configuration";
         try {
             ossClient.createBucket(bucketWithoutWebsiteConfiguration);
             ossClient.deleteBucketWebsite(bucketWithoutWebsiteConfiguration);
@@ -688,7 +688,7 @@ public class BucketWebsiteTest extends TestBase {
 
     @Test
     public void test() {
-        final String bucketName = super.bucketName + "-test-redirect";
+        final String bucketName = genBucketName() + "-test-redirect";
         final String indexDocument = "index.html";
 
         try {
@@ -854,6 +854,58 @@ public class BucketWebsiteTest extends TestBase {
             ossClient.deleteBucketWebsite(bucketName);
         } catch (Exception e) {
             e.printStackTrace();
+            Assert.fail(e.getMessage());
+        } finally {
+            ossClient.deleteBucket(bucketName);
+        }
+    }
+
+    @Test
+    public void testSetBucketWebsiteWithHttpStatus() {
+        final String bucketName = genBucketName() + "-http-status";
+        final String indexDocument = "index.html";
+        final String errorDocument = "errorDocument.html";
+
+        try {
+            ossClient.createBucket(bucketName);
+
+            SetBucketWebsiteRequest request = new SetBucketWebsiteRequest(bucketName);
+            RoutingRule rule = new RoutingRule();
+            rule.setNumber(1);
+            rule.getCondition().setHttpErrorCodeReturnedEquals(404);
+            rule.getRedirect().setRedirectType(RoutingRule.RedirectType.External);
+            rule.getRedirect().setMirrorURL("http://oss-test.aliyun-inc.com/mirror-test-source/");
+            request.setIndexDocument(indexDocument);
+            request.setErrorDocument(errorDocument);
+            request.setHttpStatus("404");
+            request.AddRoutingRule(rule);
+            rule.getRedirect().setRedirectType(RoutingRule.RedirectType.Mirror);
+            rule.getRedirect().setMirrorURL("http://oss-test.aliyun-inc.com/mirror-test/");
+
+            ossClient.setBucketWebsite(request);
+
+            waitForCacheExpiration(5);
+
+            // check
+            BucketWebsiteResult result = ossClient.getBucketWebsite(bucketName);
+            Assert.assertEquals(indexDocument, result.getIndexDocument());
+            Assert.assertEquals(result.getRoutingRules().size(), 1);
+            Assert.assertEquals(result.getErrorDocument(), "errorDocument.html");
+            Assert.assertEquals(result.getHttpStatus(), "404");
+            rule = result.getRoutingRules().get(0);
+            Assert.assertEquals(rule.getNumber().intValue(), 1);
+            Assert.assertEquals(rule.getCondition().getHttpErrorCodeReturnedEquals().intValue(), 404);
+            Assert.assertEquals(rule.getRedirect().getRedirectType(), RoutingRule.RedirectType.Mirror);
+            Assert.assertEquals(rule.getRedirect().getMirrorURL(), "http://oss-test.aliyun-inc.com/mirror-test/");
+            Assert.assertNull(rule.getRedirect().getMirrorSecondaryURL());
+            Assert.assertNull(rule.getRedirect().getMirrorProbeURL());
+            Assert.assertFalse(rule.getRedirect().isPassQueryString());
+            Assert.assertFalse(rule.getRedirect().isPassOriginalSlashes());
+            Assert.assertEquals(result.getRequestId().length(), REQUEST_ID_LEN);
+
+            ossClient.deleteBucketWebsite(bucketName);
+
+        } catch (Exception e) {
             Assert.fail(e.getMessage());
         } finally {
             ossClient.deleteBucket(bucketName);

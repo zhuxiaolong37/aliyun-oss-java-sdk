@@ -78,7 +78,10 @@ public class TestBase {
     protected static final String DOWNLOAD_DIR = USER_DIR + File.separator + "download" + File.separator;
 
     protected static final int REQUEST_ID_LEN = "5A016E35CB3DB13FD2BAAB3A".length();
-   
+
+    protected static final String NOT_OWNERSHIP_BUCKET_SUFFIX = "-attachment";
+
+
     @BeforeClass
     public static void oneTimeSetUp() {
         try {
@@ -109,10 +112,18 @@ public class TestBase {
         }
         return ossClient;
     }
-    
+
+    public static String genBucketName() {
+        long ticks = new Date().getTime() / 1000;
+        long ranint = new Random().nextInt(5000);
+        long ranint1 = new Random().nextInt(5000);
+        return BUCKET_NAME_PREFIX + ticks + "-" + ranint + "-" + ranint1;
+    }
+
     public static String createBucket() {
-        long ticks = new Date().getTime() / 1000 + new Random().nextInt(5000);
-        String bucketName = BUCKET_NAME_PREFIX + ticks;
+        long ticks = new Date().getTime() / 1000;
+        long ranint = new Random().nextInt(5000);
+        String bucketName = BUCKET_NAME_PREFIX + ticks + "-" + ranint;
         getOSSClient().createBucket(bucketName);
         waitForCacheExpiration(2);
         return bucketName;

@@ -123,6 +123,12 @@ public class ClientConfiguration {
 
     private boolean extractSettingFromEndpoint = true;
 
+    private boolean verifyObjectStrict = true;
+
+    private boolean tracerEnabled = false;
+
+    private boolean enableAutoCorrectClockSkew = false;
+
     public ClientConfiguration() {
         super();
         AppendDefaultExcludeList(this.cnameExcludeList);
@@ -948,5 +954,67 @@ public class ClientConfiguration {
      */
     public boolean isExtractSettingFromEndpointEnable() {
         return extractSettingFromEndpoint;
+    }
+
+    /**
+     * Sets the flag of verifying object name strictly.
+     *
+     * @param enabled
+     *            True if it's enabled; False if it's disabled.
+     */
+    public void setVerifyObjectStrictEnable(boolean enabled) {
+        this.verifyObjectStrict = enabled;
+    }
+
+    /**
+     * Gets the flag of verifying object name strictly. By default it's true.
+     *
+     * @return true enabled; false disabled.
+     */
+    public boolean isVerifyObjectStrict() {
+        return verifyObjectStrict;
+    }
+
+    /**
+     * Gets the flag of tracer.
+     *
+     * @return  True if it's enabled; False if it's disabled.
+     */
+    public boolean isTracerEnabled() {
+        return tracerEnabled;
+    }
+
+    /**
+     * Sets the flag of tracer.
+     *
+     * @param enabled
+     *            True if it's enabled; False if it's disabled.
+     */
+    public void setTracerEnabled(boolean enabled) {
+        this.tracerEnabled = enabled;
+    }
+
+    /**
+     * Checks whether the automatic clock skew correction feature is enabled.
+     *
+     * @return
+     *     {@code true} if the client is configured to automatically adjust its clock
+     *     based on server time when a significant time discrepancy is detected;
+     *     {@code false} otherwise.
+     */
+    public boolean isEnableAutoCorrectClockSkew() {
+        return enableAutoCorrectClockSkew;
+    }
+
+    /**
+     * Enables or disables the automatic clock skew correction feature.
+     *
+     * @param enableAutoCorrectClockSkew
+     *     {@code true} to enable automatic clock adjustment (client will correct time offsets
+     *     detected during requests based on server time);
+     *     {@code false} to disable this feature.
+     */
+    public void setEnableAutoCorrectClockSkew(boolean enableAutoCorrectClockSkew) {
+        this.enableAutoCorrectClockSkew = enableAutoCorrectClockSkew;
     }
 }

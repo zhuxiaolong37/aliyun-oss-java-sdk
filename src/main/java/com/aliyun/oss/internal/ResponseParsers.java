@@ -19,46 +19,42 @@
 
 package com.aliyun.oss.internal;
 
-import static com.aliyun.oss.common.utils.CodingUtils.isNullOrEmpty;
-import static com.aliyun.oss.internal.OSSHeaders.OSS_HEADER_WORM_ID;
-import static com.aliyun.oss.internal.OSSUtils.safeCloseResponse;
-import static com.aliyun.oss.internal.OSSUtils.trimQuotes;
-
-import java.io.InputStream;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.math.BigInteger;
-import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.zip.CheckedInputStream;
-
-import com.aliyun.oss.internal.model.OSSErrorResult;
-import com.aliyun.oss.model.*;
-import org.jdom2.Document;
-import org.jdom2.Element;
-import org.jdom2.input.JDOMParseException;
-import org.jdom2.input.SAXBuilder;
-
 import com.aliyun.oss.common.comm.ResponseMessage;
 import com.aliyun.oss.common.parser.ResponseParseException;
 import com.aliyun.oss.common.parser.ResponseParser;
 import com.aliyun.oss.common.utils.DateUtil;
 import com.aliyun.oss.common.utils.HttpUtil;
+import com.aliyun.oss.common.utils.IOUtils;
 import com.aliyun.oss.common.utils.StringUtils;
+import com.aliyun.oss.internal.model.OSSErrorResult;
+import com.aliyun.oss.model.*;
 import com.aliyun.oss.model.AddBucketReplicationRequest.ReplicationAction;
 import com.aliyun.oss.model.DeleteVersionsResult.DeletedVersion;
-import com.aliyun.oss.model.LiveChannelStat.AudioStat;
-import com.aliyun.oss.model.LiveChannelStat.VideoStat;
+import com.aliyun.oss.model.LifecycleRule.NoncurrentVersionExpiration;
+import com.aliyun.oss.model.LifecycleRule.NoncurrentVersionStorageTransition;
 import com.aliyun.oss.model.LifecycleRule.RuleStatus;
 import com.aliyun.oss.model.LifecycleRule.StorageTransition;
+import com.aliyun.oss.model.LiveChannelStat.AudioStat;
+import com.aliyun.oss.model.LiveChannelStat.VideoStat;
 import com.aliyun.oss.model.SetBucketCORSRequest.CORSRule;
-import com.aliyun.oss.model.LifecycleRule.NoncurrentVersionStorageTransition;
-import com.aliyun.oss.model.LifecycleRule.NoncurrentVersionExpiration;
+import org.codehaus.jettison.json.JSONObject;
+import org.jdom2.Document;
+import org.jdom2.Element;
+import org.jdom2.input.JDOMParseException;
+import org.jdom2.input.SAXBuilder;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.math.BigInteger;
+import java.text.ParseException;
+import java.util.*;
+import java.util.zip.CheckedInputStream;
+
+import static com.aliyun.oss.common.utils.CodingUtils.isNullOrEmpty;
+import static com.aliyun.oss.internal.OSSHeaders.OSS_HEADER_WORM_ID;
+import static com.aliyun.oss.internal.OSSUtils.safeCloseResponse;
+import static com.aliyun.oss.internal.OSSUtils.trimQuotes;
 
 /*
  * A collection of parsers that parse HTTP reponses into corresponding human-readable results.
@@ -141,6 +137,23 @@ public final class ResponseParsers {
     public static final GetBucketAccessMonitorResponseParser getBucketAccessMonitorResponseParser = new GetBucketAccessMonitorResponseParser();
     public static final GetMetaQueryStatusResponseParser getMetaQueryStatusResponseParser = new GetMetaQueryStatusResponseParser();
     public static final DoMetaQueryResponseParser doMetaQueryResponseParser = new DoMetaQueryResponseParser();
+    public static final DescribeRegionsResponseParser describeRegionsResponseParser = new DescribeRegionsResponseParser();
+    public static final GetBucketCallbackPolicyResponseParser getBucketCallbackPolicyResponseParser = new GetBucketCallbackPolicyResponseParser();
+    public static final AsyncProcessObjectResponseParser asyncProcessObjectResponseParser = new AsyncProcessObjectResponseParser();
+    public static final GetBucketArchiveDirectReadResponseParser getBucketArchiveDirectReadResponseParser = new GetBucketArchiveDirectReadResponseParser();
+    public static final GetBucketHttpsConfigResponseParser getBucketHttpsConfigResponseParser = new GetBucketHttpsConfigResponseParser();
+    public static final GetPublicAccessBlockResponseParser getPublicAccessBlockResponseParser = new GetPublicAccessBlockResponseParser();
+    public static final GetBucketPublicAccessBlockResponseParser getBucketPublicAccessBlockResponseParser = new GetBucketPublicAccessBlockResponseParser();
+    public static final GetBucketPolicyStatusResponseParser getBucketPolicyStatusResponseParser = new GetBucketPolicyStatusResponseParser();
+    public static final CreateBucketDataRedundancyTransitionResponseParser createBucketDataRedundancyTransitionResponseParser = new CreateBucketDataRedundancyTransitionResponseParser();
+    public static final GetBucketDataRedundancyTransitionResponseParser getBucketDataRedundancyTransitionResponseParser = new GetBucketDataRedundancyTransitionResponseParser();
+    public static final ListBucketDataRedundancyTransitionResponseParser listBucketDataRedundancyTransitionResponseParser = new ListBucketDataRedundancyTransitionResponseParser();
+    public static final ListUserDataRedundancyTransitionResponseParser listUserDataRedundancyTransitionResponseParser = new ListUserDataRedundancyTransitionResponseParser();
+    public static final CreateAccessPointResponseParser createAccessPointResponseParser = new CreateAccessPointResponseParser();
+    public static final GetAccessPointResponseParser getAccessPointResponseParser = new GetAccessPointResponseParser();
+    public static final GetAccessPointPolicyResponseParser getAccessPointPolicyResponseParser = new GetAccessPointPolicyResponseParser();
+    public static final ListAccessPointsResponseParser listAccessPointsResponseParser = new ListAccessPointsResponseParser();
+
 
     public static Long parseLongWithDefault(String defaultValue){
         if(defaultValue == null || "".equals(defaultValue)){
@@ -171,7 +184,7 @@ public final class ResponseParsers {
             }
         }
 
-        private OSSErrorResult parseErrorResponse(InputStream inputStream) throws ResponseParseException {
+        OSSErrorResult parseErrorResponse(InputStream inputStream) throws ResponseParseException {
             OSSErrorResult ossErrorResult = new OSSErrorResult();
             if (inputStream == null) {
                 return ossErrorResult;
@@ -185,12 +198,26 @@ public final class ResponseParsers {
                 ossErrorResult.ResourceType = root.getChildText("ResourceType");
                 ossErrorResult.Method = root.getChildText("Method");
                 ossErrorResult.Header = root.getChildText("Header");
+                ossErrorResult.EC = root.getChildText("EC");
+
+                ossErrorResult.ErrorFields = getErrorFields(root);
                 return ossErrorResult;
             } catch (JDOMParseException e) {
                 throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
             } catch (Exception e) {
                 throw new ResponseParseException(e.getMessage(), e);
             }
+        }
+
+        private static Map<String, String> getErrorFields(Element element) {
+            Map<String, String> map = new HashMap<String, String>();
+            List<Element> children = element.getChildren();
+            for (Element child : children) {
+                if (child.getChildren().isEmpty()) {
+                    map.put(child.getName(), child.getTextTrim());
+                }
+            }
+            return map;
         }
     }
 
@@ -1613,7 +1640,27 @@ public final class ResponseParsers {
                     }
                 }
             }
-            return new BucketReferer(allowEmptyReferer, refererList);
+
+            BucketReferer bucketReferer = new BucketReferer(allowEmptyReferer, refererList);
+
+            Boolean allowTruncateQueryString = null;
+            if(root.getChildText("AllowTruncateQueryString") != null){
+                allowTruncateQueryString = Boolean.valueOf(root.getChildText("AllowTruncateQueryString"));
+                bucketReferer.setAllowTruncateQueryString(allowTruncateQueryString);
+            }
+
+            if (root.getChild("RefererBlacklist") != null) {
+                List<String> blackRefererList = new ArrayList<String>();
+                Element refererListElem = root.getChild("RefererBlacklist");
+                List<Element> refererElems = refererListElem.getChildren("Referer");
+                if (refererElems != null && !refererElems.isEmpty()) {
+                    for (Element e : refererElems) {
+                        blackRefererList.add(e.getText());
+                    }
+                }
+                bucketReferer.setBlackRefererList(blackRefererList);
+            }
+            return bucketReferer;
         } catch (JDOMParseException e) {
             throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
         } catch (Exception e) {
@@ -2186,6 +2233,9 @@ public final class ResponseParsers {
             }
             if (root.getChild("ErrorDocument") != null) {
                 result.setErrorDocument(root.getChild("ErrorDocument").getChildText("Key"));
+                if (root.getChild("ErrorDocument").getChild("HttpStatus") != null) {
+                    result.setHttpStatus(root.getChild("ErrorDocument").getChildText("HttpStatus"));
+                }
             }
             if (root.getChild("RoutingRules") != null) {
                 List<Element> ruleElements = root.getChild("RoutingRules").getChildren("RoutingRule");
@@ -2704,10 +2754,12 @@ public final class ResponseParsers {
 
             // owner
             Bucket bucket = new Bucket();
-            String id = bucketElem.getChild("Owner").getChildText("ID");
-            String displayName = bucketElem.getChild("Owner").getChildText("DisplayName");
-            Owner owner = new Owner(id, displayName);
-            bucket.setOwner(owner);
+            if (bucketElem.getChild("Owner") != null) {
+                String id = bucketElem.getChild("Owner").getChildText("ID");
+                String displayName = bucketElem.getChild("Owner").getChildText("DisplayName");
+                Owner owner = new Owner(id, displayName);
+                bucket.setOwner(owner);
+            }
 
             // bucket
             bucket.setName(bucketElem.getChildText("Name"));
@@ -2819,6 +2871,9 @@ public final class ResponseParsers {
             Long coldArchiveStorage = parseLongWithDefault(root.getChildText("ColdArchiveStorage"));
             Long coldArchiveRealStorage = parseLongWithDefault(root.getChildText("ColdArchiveRealStorage"));
             Long coldArchiveObjectCount = parseLongWithDefault(root.getChildText("ColdArchiveObjectCount"));
+            Long deepColdArchiveStorage = parseLongWithDefault(root.getChildText("DeepColdArchiveStorage"));
+            Long deepColdArchiveRealStorage = parseLongWithDefault(root.getChildText("DeepColdArchiveRealStorage"));
+            Long deepColdArchiveObjectCount = parseLongWithDefault(root.getChildText("DeepColdArchiveObjectCount"));
             BucketStat bucketStat = new BucketStat()
                     .withStorageSize(storage)
                     .withObjectCount(objectCount)
@@ -2835,7 +2890,10 @@ public final class ResponseParsers {
                     .withArchiveObjectCount(archiveObjectCount)
                     .withColdArchiveStorage(coldArchiveStorage)
                     .withColdArchiveRealStorage(coldArchiveRealStorage)
-                    .withColdArchiveObjectCount(coldArchiveObjectCount);
+                    .withColdArchiveObjectCount(coldArchiveObjectCount)
+                    .withDeepColdArchiveStorage(deepColdArchiveStorage)
+                    .withDeepColdArchiveRealStorage(deepColdArchiveRealStorage)
+                    .withDeepColdArchiveObjectCount(deepColdArchiveObjectCount);
 
             return bucketStat;
         } catch (JDOMParseException e) {
@@ -3433,6 +3491,12 @@ public final class ResponseParsers {
                 Element filterElems = ruleElem.getChild("Filter");
                 if(filterElems != null){
                     LifecycleFilter lifecycleFilter = new LifecycleFilter();
+                    if (filterElems.getChild("ObjectSizeGreaterThan") != null) {
+                        lifecycleFilter.setObjectSizeGreaterThan(Long.valueOf(filterElems.getChildText("ObjectSizeGreaterThan")));
+                    }
+                    if (filterElems.getChild("ObjectSizeLessThan") != null) {
+                        lifecycleFilter.setObjectSizeLessThan(Long.valueOf(filterElems.getChildText("ObjectSizeLessThan")));
+                    }
 
                     List<LifecycleNot> notList = new ArrayList<LifecycleNot>();
                     for(Element notEle : filterElems.getChildren("Not")){
@@ -3580,6 +3644,10 @@ public final class ResponseParsers {
                     cname.setCertType(CnameConfiguration.CertType.parse(certElem.getChildText("Type")));
                     cname.setCertStatus(CnameConfiguration.CertStatus.parse(certElem.getChildText("Status")));
                     cname.setCertId(certElem.getChildText("CertId"));
+                    cname.setCreationDate(certElem.getChildText("CreationDate"));
+                    cname.setFingerprint(certElem.getChildText("Fingerprint"));
+                    cname.setValidStartDate(certElem.getChildText("ValidStartDate"));
+                    cname.setValidEndDate(certElem.getChildText("ValidEndDate"));
                 }
 
                 cnames.add(cname);
@@ -4024,6 +4092,9 @@ public final class ResponseParsers {
                 if (root.getChildText("UpdateTime") != null) {
                     getMetaQueryStatusResult.setUpdateTime(root.getChildText("UpdateTime"));
                 }
+                if (root.getChildText("MetaQueryMode") != null) {
+                    getMetaQueryStatusResult.setMetaQueryMode(MetaQueryMode.parse(root.getChildText("MetaQueryMode")));
+                }
                 return getMetaQueryStatusResult;
             } catch (JDOMParseException e) {
                 throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
@@ -4064,6 +4135,9 @@ public final class ResponseParsers {
                     List<ObjectFile> fileList = new ArrayList<ObjectFile>();
                     for(Element elem : fileElem){
                         ObjectFile objectFile = new ObjectFile();
+                        if (elem.getChild("URI") != null) {
+                            objectFile.setUri(elem.getChildText("URI"));
+                        }
                         objectFile.setFilename(elem.getChildText("Filename"));
                         if(!StringUtils.isNullOrEmpty(elem.getChildText("Size"))){
                             objectFile.setSize(Long.parseLong(elem.getChildText("Size")));
@@ -4109,6 +4183,170 @@ public final class ResponseParsers {
                             ossUserMeta.setUserMeta(userMetaList);
                             objectFile.setOssUserMeta(ossUserMeta);
                         }
+
+                        if (elem.getChild("MediaType") != null) {
+                            objectFile.setMediaType(elem.getChildText("MediaType"));
+                        }
+                        if (elem.getChild("ContentType") != null) {
+                            objectFile.setContentType(elem.getChildText("ContentType"));
+                        }
+
+                        objectFile.setServerSideEncryption(elem.getChildText("ServerSideEncryption"));
+                        objectFile.setServerSideEncryptionCustomerAlgorithm(elem.getChildText("ServerSideEncryptionCustomerAlgorithm"));
+                        objectFile.setProduceTime(elem.getChildText("ProduceTime"));
+                        objectFile.setMediaType(elem.getChildText("MediaType"));
+                        objectFile.setContentType(elem.getChildText("ContentType"));
+                        objectFile.setLatLong(elem.getChildText("LatLong"));
+                        objectFile.setTitle(elem.getChildText("Title"));
+                        objectFile.setOssExpiration(elem.getChildText("OSSExpiration"));
+                        objectFile.setAccessControlAllowOrigin(elem.getChildText("AccessControlAllowOrigin"));
+                        objectFile.setAccessControlRequestMethod(elem.getChildText("AccessControlRequestMethod"));
+                        objectFile.setServerSideDataEncryption(elem.getChildText("ServerSideDataEncryption"));
+                        objectFile.setServerSideEncryptionKeyId(elem.getChildText("ServerSideEncryptionKeyId"));
+                        objectFile.setCacheControl(elem.getChildText("CacheControl"));
+                        objectFile.setContentDisposition(elem.getChildText("ContentDisposition"));
+                        objectFile.setContentEncoding(elem.getChildText("ContentEncoding"));
+                        objectFile.setContentLanguage(elem.getChildText("ContentLanguage"));
+
+                        if (elem.getChild("ImageHeight") != null) {
+                            objectFile.setImageHeight(Long.parseLong(elem.getChildText("ImageHeight")));
+                        }
+                        if (elem.getChild("ImageWidth") != null) {
+                            objectFile.setImageWidth(Long.parseLong(elem.getChildText("ImageWidth")));
+                        }
+                        if (elem.getChild("VideoHeight") != null) {
+                            objectFile.setVideoHeight(Long.parseLong(elem.getChildText("VideoHeight")));
+                        }
+                        if (elem.getChild("VideoWidth") != null) {
+                            objectFile.setVideoWidth(Long.parseLong(elem.getChildText("VideoWidth")));
+                        }
+
+                        Element videoStreamElem = elem.getChild("VideoStreams");
+                        if(videoStreamElem != null){
+                            List<Element> videoElem = videoStreamElem.getChildren();
+                            List<MetaQueryVideoStream> metaQueryVideoStreamList = new ArrayList<MetaQueryVideoStream>();
+                            for(Element ele : videoElem){
+                                MetaQueryVideoStream metaQueryVideoStream = new MetaQueryVideoStream();
+                                metaQueryVideoStream.setCodecName(ele.getChildText("CodecName"));
+                                metaQueryVideoStream.setLanguage(ele.getChildText("Language"));
+                                if (ele.getChild("Bitrate") != null) {
+                                    metaQueryVideoStream.setBitrate(Long.parseLong(ele.getChildText("Bitrate")));
+                                }
+                                metaQueryVideoStream.setFrameRate(ele.getChildText("FrameRate"));
+                                if (ele.getChild("StartTime") != null) {
+                                    metaQueryVideoStream.setStartTime(Double.parseDouble(ele.getChildText("StartTime")));
+                                }
+                                if (ele.getChild("Duration") != null) {
+                                    metaQueryVideoStream.setDuration(Double.parseDouble(ele.getChildText("Duration")));
+                                }
+                                if (ele.getChild("FrameCount") != null) {
+                                    metaQueryVideoStream.setFrameCount(Long.parseLong(ele.getChildText("FrameCount")));
+                                }
+                                if (ele.getChild("BitDepth") != null) {
+                                    metaQueryVideoStream.setBitDepth(Long.parseLong(ele.getChildText("BitDepth")));
+                                }
+                                metaQueryVideoStream.setPixelFormat(ele.getChildText("PixelFormat"));
+                                metaQueryVideoStream.setColorSpace(ele.getChildText("ColorSpace"));
+                                if (ele.getChild("Height") != null) {
+                                    metaQueryVideoStream.setHeight(Long.parseLong(ele.getChildText("Height")));
+                                }
+                                if (ele.getChild("Width") != null) {
+                                    metaQueryVideoStream.setWidth(Long.parseLong(ele.getChildText("Width")));
+                                }
+
+                                metaQueryVideoStreamList.add(metaQueryVideoStream);
+                            }
+
+                            objectFile.setMetaQueryVideoStreams(metaQueryVideoStreamList);
+                        }
+
+                        Element audioStreamElem = elem.getChild("AudioStreams");
+                        if(audioStreamElem != null) {
+                            List<Element> audioElem = audioStreamElem.getChildren();
+                            List<MetaQueryAudioStream> metaQueryAudioStreamList = new ArrayList<MetaQueryAudioStream>();
+                            for(Element ele : audioElem){
+                                MetaQueryAudioStream metaQueryAudioStream = new MetaQueryAudioStream();
+                                metaQueryAudioStream.setCodecName(ele.getChildText("CodecName"));
+                                if (ele.getChild("Bitrate") != null) {
+                                    metaQueryAudioStream.setBitrate(Long.parseLong(ele.getChildText("Bitrate")));
+                                }
+                                if (ele.getChild("SampleRate") != null) {
+                                    metaQueryAudioStream.setSampleRate(Long.parseLong(ele.getChildText("SampleRate")));
+                                }
+                                if (ele.getChild("StartTime") != null) {
+                                    metaQueryAudioStream.setStartTime(Double.parseDouble(ele.getChildText("StartTime")));
+                                }
+
+                                if (ele.getChild("Duration") != null) {
+                                    metaQueryAudioStream.setDuration(Double.parseDouble(ele.getChildText("Duration")));
+                                }
+
+                                if (ele.getChild("Channels") != null) {
+                                    metaQueryAudioStream.setChannels(Long.parseLong(ele.getChildText("Channels")));
+                                }
+
+                                metaQueryAudioStream.setLanguage(ele.getChildText("Language"));
+
+                                metaQueryAudioStreamList.add(metaQueryAudioStream);
+                            }
+                            objectFile.setMetaQueryAudioStreams(metaQueryAudioStreamList);
+                        }
+
+                        Element subtitleElem = elem.getChild("Subtitles");
+                        if (subtitleElem != null) {
+                            List<Element> subtitleElemList = subtitleElem.getChildren();
+                            List<MetaQuerySubtitle> metaQuerySubtitleList = new ArrayList<MetaQuerySubtitle>();
+                            for (Element ele : subtitleElemList) {
+                                MetaQuerySubtitle metaQuerySubtitle = new MetaQuerySubtitle();
+                                metaQuerySubtitle.setCodecName(ele.getChildText("CodecName"));
+                                metaQuerySubtitle.setLanguage(ele.getChildText("Language"));
+
+                                if (ele.getChild("StartTime") != null) {
+                                    metaQuerySubtitle.setStartTime(Double.parseDouble(ele.getChildText("StartTime")));
+                                }
+
+                                if (ele.getChild("Duration") != null) {
+                                    metaQuerySubtitle.setDuration(Double.parseDouble(ele.getChildText("Duration")));
+                                }
+
+                                metaQuerySubtitleList.add(metaQuerySubtitle);
+                            }
+                            objectFile.setMetaQuerySubtitles(metaQuerySubtitleList);
+                        }
+
+                        if (elem.getChild("Bitrate") != null) {
+                            objectFile.setBitrate(Long.parseLong(elem.getChildText("Bitrate")));
+                        }
+
+                        objectFile.setArtist(elem.getChildText("Artist"));
+                        objectFile.setAlbumArtist(elem.getChildText("AlbumArtist"));
+                        objectFile.setComposer(elem.getChildText("Composer"));
+                        objectFile.setPerformer(elem.getChildText("Performer"));
+                        objectFile.setAlbum(elem.getChildText("Album"));
+
+                        if (elem.getChild("Duration") != null) {
+                            objectFile.setDuration(Double.parseDouble(elem.getChildText("Duration")));
+                        }
+
+                        Element addressElem = elem.getChild("Addresses");
+                        if (addressElem != null) {
+                            List<Element> addressElemList = addressElem.getChildren();
+                            List<MetaQueryAddress> addressList = new ArrayList<MetaQueryAddress>();
+                            for (Element ele : addressElemList) {
+                                MetaQueryAddress address = new MetaQueryAddress();
+                                address.setAddressLine(ele.getChildText("AddressLine"));
+                                address.setCity(ele.getChildText("City"));
+                                address.setCountry(ele.getChildText("Country"));
+                                address.setDistrict(ele.getChildText("District"));
+                                address.setLanguage(ele.getChildText("Language"));
+                                address.setProvince(ele.getChildText("Province"));
+                                address.setTownship(ele.getChildText("Township"));
+
+                                addressList.add(address);
+                            }
+                            objectFile.setAddresses(addressList);
+                        }
+
                         fileList.add(objectFile);
                     }
                     objectFiles.setFile(fileList);
@@ -4150,6 +4388,636 @@ public final class ResponseParsers {
                 }
 
                 return doMetaQueryResult;
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class DescribeRegionsResponseParser implements ResponseParser<DescribeRegionsResult> {
+        @Override
+        public DescribeRegionsResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                DescribeRegionsResult result = parseDescribeRegionsResult(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private DescribeRegionsResult parseDescribeRegionsResult(InputStream inputStream) throws ResponseParseException {
+            DescribeRegionsResult describeRegionsResult = new DescribeRegionsResult();
+            if (inputStream == null) {
+                return describeRegionsResult;
+            }
+
+            try {
+                Element root = getXmlRootElement(inputStream);
+                List<RegionInfo> regionInfoList = new ArrayList<RegionInfo>();
+
+                List<Element> regionListElems = root.getChildren("RegionInfo");
+                for (Element elem : regionListElems) {
+                    RegionInfo regionInfo = new RegionInfo();
+                    regionInfo.setRegion(elem.getChildText("Region"));
+                    regionInfo.setInternetEndpoint(elem.getChildText("InternetEndpoint"));
+                    regionInfo.setInternalEndpoint(elem.getChildText("InternalEndpoint"));
+                    regionInfo.setAccelerateEndpoint(elem.getChildText("AccelerateEndpoint"));
+
+                    regionInfoList.add(regionInfo);
+                }
+                describeRegionsResult.setRegionInfoList(regionInfoList);
+
+                return describeRegionsResult;
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class GetBucketCallbackPolicyResponseParser implements ResponseParser<GetBucketCallbackPolicyResult> {
+
+        @Override
+        public GetBucketCallbackPolicyResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                GetBucketCallbackPolicyResult result = parseGetBucketCallbackPolicy(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private GetBucketCallbackPolicyResult parseGetBucketCallbackPolicy(InputStream inputStream) throws ResponseParseException {
+            GetBucketCallbackPolicyResult result = new GetBucketCallbackPolicyResult();
+            if (inputStream == null) {
+                return result;
+            }
+
+            try {
+                Element root = getXmlRootElement(inputStream);
+
+                List<Element> fileElem = root.getChildren();
+                List<PolicyCallbackItem> policyCallbackItems = new ArrayList<PolicyCallbackItem>();
+                for (Element elem : fileElem) {
+                    PolicyCallbackItem policyCallbackItem = new PolicyCallbackItem(elem.getChildText("PolicyName"), elem.getChildText("Callback"));
+                    policyCallbackItem.setCallbackVar(elem.getChildText("CallbackVar"));
+                    policyCallbackItems.add(policyCallbackItem);
+                }
+                result.setPolicyCallbackItems(policyCallbackItems);
+                return result;
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class AsyncProcessObjectResponseParser implements ResponseParser<AsyncProcessObjectResult> {
+
+        @Override
+        public AsyncProcessObjectResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                AsyncProcessObjectResult result = parseAsyncProcessObject(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private AsyncProcessObjectResult parseAsyncProcessObject(InputStream inputStream) throws ResponseParseException {
+            AsyncProcessObjectResult asyncProcessObjectResult = new AsyncProcessObjectResult();
+            if (inputStream == null) {
+                return asyncProcessObjectResult;
+            }
+
+            try {
+                String jsonStr = IOUtils.readStreamAsString(inputStream, "UTF-8");
+                JSONObject jsonObject = new JSONObject(jsonStr);
+                asyncProcessObjectResult.setAsyncRequestId(jsonObject.getString("RequestId"));
+                asyncProcessObjectResult.setEventId(jsonObject.getString("EventId"));
+                asyncProcessObjectResult.setTaskId(jsonObject.getString("TaskId"));
+                return asyncProcessObjectResult;
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class GetBucketArchiveDirectReadResponseParser implements ResponseParser<GetBucketArchiveDirectReadResult> {
+        @Override
+        public GetBucketArchiveDirectReadResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                GetBucketArchiveDirectReadResult result = parseGetArchiveDirectRead(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+        private GetBucketArchiveDirectReadResult parseGetArchiveDirectRead(InputStream inputStream) throws ResponseParseException {
+            GetBucketArchiveDirectReadResult getBucketArchiveDirectReadResult = new GetBucketArchiveDirectReadResult();
+            if (inputStream == null) {
+                return getBucketArchiveDirectReadResult;
+            }
+            try {
+                Element root = getXmlRootElement(inputStream);
+                if (root.getChildText("Enabled") != null) {
+                    getBucketArchiveDirectReadResult.setEnabled(Boolean.valueOf(root.getChildText("Enabled")));
+                }
+                return getBucketArchiveDirectReadResult;
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class CreateBucketDataRedundancyTransitionResponseParser implements ResponseParser<CreateBucketDataRedundancyTransitionResult> {
+
+        @Override
+        public CreateBucketDataRedundancyTransitionResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                CreateBucketDataRedundancyTransitionResult result = parseCreateBucketDataRedundancyTransition(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private CreateBucketDataRedundancyTransitionResult parseCreateBucketDataRedundancyTransition(InputStream inputStream) throws ResponseParseException {
+            CreateBucketDataRedundancyTransitionResult createBucketDataRedundancyTransitionResult = new CreateBucketDataRedundancyTransitionResult();
+            if (inputStream == null) {
+                return createBucketDataRedundancyTransitionResult;
+            }
+            try {
+                Element root = getXmlRootElement(inputStream);
+
+                createBucketDataRedundancyTransitionResult.setTaskId(root.getChildText("TaskId"));
+                return createBucketDataRedundancyTransitionResult;
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class GetBucketDataRedundancyTransitionResponseParser implements ResponseParser<GetBucketDataRedundancyTransitionResult> {
+
+        @Override
+        public GetBucketDataRedundancyTransitionResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                GetBucketDataRedundancyTransitionResult result = parseGetBucketDataRedundancyTransition(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private GetBucketDataRedundancyTransitionResult parseGetBucketDataRedundancyTransition(InputStream responseBody)
+                throws ResponseParseException {
+            try {
+                Element root = getXmlRootElement(responseBody);
+                return parseBucketDataRedundancyTransitionResult(root);
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+
+    }
+
+    public static final class ListBucketDataRedundancyTransitionResponseParser implements ResponseParser<List<GetBucketDataRedundancyTransitionResult>> {
+
+        @Override
+        public List<GetBucketDataRedundancyTransitionResult> parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                return parseListBucketDataRedundancyTransitionResult(response.getContent());
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private List<GetBucketDataRedundancyTransitionResult> parseListBucketDataRedundancyTransitionResult(InputStream responseBody)
+                throws ResponseParseException {
+            try {
+
+                Element root = getXmlRootElement(responseBody);
+
+                List<GetBucketDataRedundancyTransitionResult> result = new ArrayList<GetBucketDataRedundancyTransitionResult>();
+                List<Element> bucketDataRedundancyTransitions = root.getChildren("BucketDataRedundancyTransition");
+
+                for (Element e : bucketDataRedundancyTransitions) {
+                    GetBucketDataRedundancyTransitionResult getBucketDataRedundancyTransitionResult = parseBucketDataRedundancyTransitionResult(e);
+                    result.add(getBucketDataRedundancyTransitionResult);
+                }
+
+                return result;
+
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+
+    }
+
+    public static final class ListUserDataRedundancyTransitionResponseParser implements ResponseParser<ListUserDataRedundancyTransitionResult> {
+        @Override
+        public ListUserDataRedundancyTransitionResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                ListUserDataRedundancyTransitionResult result = parseListDataRedundancyTransition(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private ListUserDataRedundancyTransitionResult parseListDataRedundancyTransition(InputStream inputStream) throws ResponseParseException {
+            ListUserDataRedundancyTransitionResult listUserDataRedundancyTransitionResult = new ListUserDataRedundancyTransitionResult();
+            List<GetBucketDataRedundancyTransitionResult> bucketDataRedundancyTransitionResultList = new ArrayList<GetBucketDataRedundancyTransitionResult>();
+            if (inputStream == null) {
+                return listUserDataRedundancyTransitionResult;
+            }
+
+            try {
+                Element root = getXmlRootElement(inputStream);
+                if(root.getChildText("IsTruncated") != null){
+                    listUserDataRedundancyTransitionResult.setTruncated(Boolean.valueOf(root.getChildText("IsTruncated")));
+                }
+
+                listUserDataRedundancyTransitionResult.setNextContinuationToken(root.getChildText("NextContinuationToken"));
+
+                List<Element> bucketDataRedundancyTransitions = root.getChildren("BucketDataRedundancyTransition");
+                for (Element e : bucketDataRedundancyTransitions) {
+                    GetBucketDataRedundancyTransitionResult getBucketDataRedundancyTransitionResult = parseBucketDataRedundancyTransitionResult(e);
+                    bucketDataRedundancyTransitionResultList.add(getBucketDataRedundancyTransitionResult);
+                }
+                listUserDataRedundancyTransitionResult.setBucketDataRedundancyTransition(bucketDataRedundancyTransitionResultList);
+                return listUserDataRedundancyTransitionResult;
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static GetBucketDataRedundancyTransitionResult parseBucketDataRedundancyTransitionResult(Element element) {
+        GetBucketDataRedundancyTransitionResult result = new GetBucketDataRedundancyTransitionResult();
+
+        result.setTaskId(element.getChildText("TaskId"));
+        result.setCreateTime(element.getChildText("CreateTime"));
+        if (null != element.getChild("StartTime")) {
+            result.setStartTime(element.getChildText("StartTime"));
+        }
+        if (null != element.getChild("EndTime")) {
+            result.setEndTime(element.getChildText("EndTime"));
+        }
+        result.setStatus(element.getChildText("Status"));
+        if (null != element.getChild("EstimatedRemainingTime")) {
+            result.setEstimatedRemainingTime(Integer.parseInt(element.getChildText("EstimatedRemainingTime")));
+        }
+        if (null != element.getChild("ProcessPercentage")) {
+            result.setProcessPercentage(Integer.parseInt(element.getChildText("ProcessPercentage")));
+        }
+        if (null != element.getChild("Bucket")) {
+            result.setBucket(element.getChildText("Bucket"));
+        }
+
+        return result;
+    }
+
+    public static final class GetBucketHttpsConfigResponseParser implements ResponseParser<GetBucketHttpsConfigResult> {
+
+        @Override
+        public GetBucketHttpsConfigResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                GetBucketHttpsConfigResult result = parseGetBucketHttpsConfig(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private GetBucketHttpsConfigResult parseGetBucketHttpsConfig(InputStream inputStream) throws ResponseParseException {
+            GetBucketHttpsConfigResult result = new GetBucketHttpsConfigResult();
+            if (inputStream == null) {
+                return result;
+            }
+
+            try {
+                Element root = getXmlRootElement(inputStream);
+
+                Element tlsElem = root.getChild("TLS");
+                if(tlsElem != null){
+
+                    result.setEnable(Boolean.parseBoolean(tlsElem.getChildText("Enable")));
+                    List<String> tlsVersion = new ArrayList<String>();
+                    List<Element> tlsVersionElem = tlsElem.getChildren("TLSVersion");
+                    if(!tlsVersionElem.isEmpty()){
+                        for (Element elem : tlsVersionElem) {
+                            String version = elem.getValue();
+                            tlsVersion.add(version);
+                        }
+                        result.setTlsVersion(tlsVersion);
+                    }
+                }
+                return result;
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class GetPublicAccessBlockResponseParser implements ResponseParser<GetPublicAccessBlockResult> {
+        @Override
+        public GetPublicAccessBlockResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                GetPublicAccessBlockResult result = parseGetPublicAccessBlock(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private GetPublicAccessBlockResult parseGetPublicAccessBlock(InputStream inputStream) throws ResponseParseException {
+            GetPublicAccessBlockResult getPublicAccessBlockResult = new GetPublicAccessBlockResult();
+            if (inputStream == null) {
+                return getPublicAccessBlockResult;
+            }
+
+            try {
+                Element root = getXmlRootElement(inputStream);
+
+                if (root.getChildText("BlockPublicAccess") != null) {
+                    getPublicAccessBlockResult.setBlockPublicAccess(Boolean.valueOf(root.getChildText("BlockPublicAccess")));
+                }
+
+                return getPublicAccessBlockResult;
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class GetBucketPublicAccessBlockResponseParser implements ResponseParser<GetBucketPublicAccessBlockResult> {
+        @Override
+        public GetBucketPublicAccessBlockResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                GetBucketPublicAccessBlockResult result = parseGetBucketPublicAccessBlock(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private GetBucketPublicAccessBlockResult parseGetBucketPublicAccessBlock(InputStream inputStream) throws ResponseParseException {
+            GetBucketPublicAccessBlockResult getBucketPublicAccessBlockResult = new GetBucketPublicAccessBlockResult();
+            if (inputStream == null) {
+                return getBucketPublicAccessBlockResult;
+            }
+
+            try {
+                Element root = getXmlRootElement(inputStream);
+
+                if (root.getChildText("BlockPublicAccess") != null) {
+                    getBucketPublicAccessBlockResult.setBlockPublicAccess(Boolean.valueOf(root.getChildText("BlockPublicAccess")));
+                }
+
+                return getBucketPublicAccessBlockResult;
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class GetBucketPolicyStatusResponseParser implements ResponseParser<GetBucketPolicyStatusResult> {
+        @Override
+        public GetBucketPolicyStatusResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                GetBucketPolicyStatusResult result = parseGetBucketPolicyStatus(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private GetBucketPolicyStatusResult parseGetBucketPolicyStatus(InputStream inputStream) throws ResponseParseException {
+            GetBucketPolicyStatusResult getBucketPolicyStatusResult = new GetBucketPolicyStatusResult();
+            if (inputStream == null) {
+                return getBucketPolicyStatusResult;
+            }
+
+            try {
+                Element root = getXmlRootElement(inputStream);
+
+                if (root.getChildText("IsPublic") != null) {
+                    getBucketPolicyStatusResult.setPublic(Boolean.valueOf(root.getChildText("IsPublic")));
+                }
+
+                return getBucketPolicyStatusResult;
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class CreateAccessPointResponseParser implements ResponseParser<CreateAccessPointResult> {
+        @Override
+        public CreateAccessPointResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                CreateAccessPointResult result = parseCreateAccessPoint(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private CreateAccessPointResult parseCreateAccessPoint(InputStream inputStream) throws ResponseParseException {
+            CreateAccessPointResult createAccessPointResult = new CreateAccessPointResult();
+            if (inputStream == null) {
+                return createAccessPointResult;
+            }
+
+            try {
+                Element root = getXmlRootElement(inputStream);
+
+                createAccessPointResult.setAccessPointArn(root.getChildText("AccessPointArn"));
+                createAccessPointResult.setAlias(root.getChildText("Alias"));
+
+                return createAccessPointResult;
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class GetAccessPointResponseParser implements ResponseParser<GetAccessPointResult> {
+        @Override
+        public GetAccessPointResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                GetAccessPointResult result = parseGetAccessPoint(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private GetAccessPointResult parseGetAccessPoint(InputStream inputStream) throws ResponseParseException {
+            GetAccessPointResult getAccessPointResult = new GetAccessPointResult();
+            if (inputStream == null) {
+                return getAccessPointResult;
+            }
+
+            try {
+                Element root = getXmlRootElement(inputStream);
+
+                getAccessPointResult.setAccessPointName(root.getChildText("AccessPointName"));
+                getAccessPointResult.setBucket(root.getChildText("Bucket"));
+                getAccessPointResult.setAccountId(root.getChildText("AccountId"));
+                getAccessPointResult.setNetworkOrigin(root.getChildText("NetworkOrigin"));
+                if (root.getChild("VpcConfiguration").getChildText("VpcId") != null) {
+                    AccessPointVpcConfiguration accessPointVpcConfiguration = new AccessPointVpcConfiguration();
+                    accessPointVpcConfiguration.setVpcId(root.getChild("VpcConfiguration").getChildText("VpcId"));
+                    getAccessPointResult.setVpc(accessPointVpcConfiguration);
+                }
+                getAccessPointResult.setAccessPointArn(root.getChildText("AccessPointArn"));
+                if (root.getChildText("CreationDate") != null) {
+                    getAccessPointResult.setCreationDate(root.getChildText("CreationDate"));
+                }
+                getAccessPointResult.setAlias(root.getChildText("Alias"));
+                getAccessPointResult.setStatus(root.getChildText("Status"));
+
+                if (root.getChild("Endpoints") != null) {
+                    AccessPointEndpoints accessPointEndpoints = new AccessPointEndpoints();
+                    if (root.getChild("Endpoints").getChildText("PublicEndpoint") != null) {
+                        accessPointEndpoints.setPublicEndpoint(root.getChild("Endpoints").getChildText("PublicEndpoint"));
+                    }
+                    if (root.getChild("Endpoints").getChildText("InternalEndpoint") != null) {
+                        accessPointEndpoints.setInternalEndpoint(root.getChild("Endpoints").getChildText("InternalEndpoint"));
+                    }
+                    getAccessPointResult.setEndpoints(accessPointEndpoints);
+                }
+
+                return getAccessPointResult;
+            } catch (JDOMParseException e) {
+                throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class GetAccessPointPolicyResponseParser implements ResponseParser<GetAccessPointPolicyResult> {
+        @Override
+        public GetAccessPointPolicyResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                GetAccessPointPolicyResult result = parseGetAccessPointPolicy(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private GetAccessPointPolicyResult parseGetAccessPointPolicy(InputStream inputStream) throws ResponseParseException {
+            GetAccessPointPolicyResult getAccessPointPolicyResult = new GetAccessPointPolicyResult();
+            if (inputStream == null) {
+                return getAccessPointPolicyResult;
+            }
+
+            try {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+                StringBuilder sb = new StringBuilder();
+
+                String s ;
+                while (( s = reader.readLine()) != null) {
+                    sb.append(s);
+                }
+
+                getAccessPointPolicyResult.setAccessPointPolicy(sb.toString());
+
+                return getAccessPointPolicyResult;
+            } catch (Exception e) {
+                throw new ResponseParseException(e.getMessage(), e);
+            }
+        }
+    }
+
+    public static final class ListAccessPointsResponseParser implements ResponseParser<ListAccessPointsResult> {
+        @Override
+        public ListAccessPointsResult parse(ResponseMessage response) throws ResponseParseException {
+            try {
+                ListAccessPointsResult result = parseListAccessPoint(response.getContent());
+                setResultParameter(result, response);
+                return result;
+            } finally {
+                safeCloseResponse(response);
+            }
+        }
+
+        private ListAccessPointsResult parseListAccessPoint(InputStream inputStream) throws ResponseParseException {
+            ListAccessPointsResult listAccessPointsResult = new ListAccessPointsResult();
+            if (inputStream == null) {
+                return listAccessPointsResult;
+            }
+
+            try {
+                Element root = getXmlRootElement(inputStream);
+                if(root.getChildText("IsTruncated") != null){
+                    listAccessPointsResult.setTruncated(Boolean.valueOf(root.getChildText("IsTruncated")));
+                }
+
+                listAccessPointsResult.setNextContinuationToken(root.getChildText("NextContinuationToken"));
+                listAccessPointsResult.setAccountId(root.getChildText("AccountId"));
+
+                if (root.getChild("AccessPoints") != null) {
+                    List<Element> accessElems = root.getChild("AccessPoints").getChildren("AccessPoint");
+                    List<AccessPoint> accessPoints = new ArrayList<AccessPoint>();
+                    for (Element e : accessElems) {
+                        AccessPoint accessPoint = new AccessPoint();
+                        accessPoint.setBucket(e.getChildText("Bucket"));
+                        accessPoint.setAccessPointName(e.getChildText("AccessPointName"));
+                        accessPoint.setAlias(e.getChildText("Alias"));
+                        accessPoint.setNetworkOrigin(e.getChildText("NetworkOrigin"));
+                        accessPoint.setStatus(e.getChildText("Status"));
+
+                        if (e.getChild("VpcConfiguration").getChildText("VpcId") != null) {
+                            AccessPointVpcConfiguration accessPointVpcConfiguration = new AccessPointVpcConfiguration();
+                            accessPointVpcConfiguration.setVpcId(e.getChild("VpcConfiguration").getChildText("VpcId"));
+                            accessPoint.setVpc(accessPointVpcConfiguration);
+                        }
+                        accessPoints.add(accessPoint);
+                    }
+                    listAccessPointsResult.setAccessPoints(accessPoints);
+                }
+                return listAccessPointsResult;
             } catch (JDOMParseException e) {
                 throw new ResponseParseException(e.getPartialDocument() + ": " + e.getMessage(), e);
             } catch (Exception e) {

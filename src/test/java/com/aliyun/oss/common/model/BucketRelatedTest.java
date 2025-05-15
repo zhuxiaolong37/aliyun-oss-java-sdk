@@ -411,13 +411,7 @@ public class BucketRelatedTest {
     public void testDataRedundancyType() {
         assertEquals(DataRedundancyType.LRS, DataRedundancyType.parse("LRS"));
         assertEquals(DataRedundancyType.ZRS, DataRedundancyType.parse("ZRS"));
-
-        try {
-            DataRedundancyType type = DataRedundancyType.parse("ERROR");
-            assertTrue(false);
-        } catch (Exception e) {
-            assertTrue(true);
-        }
+        assertEquals(DataRedundancyType.Unknown, DataRedundancyType.parse("ERROR"));
     }
 
     @Test
@@ -559,9 +553,9 @@ public class BucketRelatedTest {
             for (int i = 0; i < 1001; i++)
                 lifecycleRules.add(new LifecycleRule());
             request.setLifecycleRules(lifecycleRules);
-            assertTrue(false);
-        } catch (Exception e) {
             assertTrue(true);
+        } catch (Exception e) {
+            assertTrue(false);
         }
 
         try {

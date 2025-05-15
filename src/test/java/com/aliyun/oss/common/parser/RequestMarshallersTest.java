@@ -6,6 +6,7 @@ package com.aliyun.oss.common.parser;
 
 import com.aliyun.oss.OSSException;
 import com.aliyun.oss.common.comm.io.FixedLengthInputStream;
+import com.aliyun.oss.common.utils.BinaryUtil;
 import com.aliyun.oss.common.utils.DateUtil;
 import com.aliyun.oss.model.*;
 import junit.framework.Assert;
@@ -21,7 +22,6 @@ import java.text.ParseException;
 import java.util.*;
 
 import static com.aliyun.oss.common.parser.RequestMarshallers.*;
-import static com.aliyun.oss.common.parser.RequestMarshallers.putBucketAccessMonitorRequestMarshaller;
 
 public class RequestMarshallersTest {
     @Test
@@ -1413,4 +1413,355 @@ public class RequestMarshallersTest {
         Assert.assertEquals("key2", root.getChild("Rule").getChild("Filter").getChildren("Not").get(1).getChild("Tag").getChildText("Key"));
         Assert.assertEquals("value2", root.getChild("Rule").getChild("Filter").getChildren("Not").get(1).getChild("Tag").getChildText("Value"));
     }
+
+    @Test
+    public void testPutBucketRefererRequestMarshaller() {
+        final String bucketName = "unormal-set-bucket-referer";
+        final String referer0 = "http://www.aliyun.com";
+        final String referer1 = "https://www.aliyun.com";
+        final String refererBlack0 = "http://oss-cn-chengdu.aliyuncs.com";
+        final String refererBlack1 = "https://oss-cn-chengdu.aliyuncs.com";
+
+
+        BucketReferer r = new BucketReferer();
+        r.setAllowEmptyReferer(false);
+        r.setAllowTruncateQueryString(true);
+
+        List<String> refererList = new ArrayList<String>();
+        refererList.add(referer0);
+        refererList.add(referer1);
+        r.setRefererList(refererList);
+
+        List<String> refererBlackList = new ArrayList<String>();
+        refererBlackList.add(refererBlack0);
+        refererBlackList.add(refererBlack1);
+        r.setBlackRefererList(refererBlackList);
+
+        SetBucketRefererRequest request = new SetBucketRefererRequest(bucketName)
+                .withReferer(r);
+
+        FixedLengthInputStream is = bucketRefererMarshaller.marshall(r);
+
+        SAXBuilder builder = new SAXBuilder();
+        Document doc = null;
+        try {
+            doc = builder.build(is);
+        } catch (JDOMException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        Element root = doc.getRootElement();
+        Assert.assertEquals("false", root.getChildText("AllowEmptyReferer"));
+        Assert.assertEquals("true", root.getChildText("AllowTruncateQueryString"));
+        Assert.assertEquals("http://www.aliyun.com", root.getChild("RefererList").getChildren("Referer").get(0).getText());
+        Assert.assertEquals("https://www.aliyun.com", root.getChild("RefererList").getChildren("Referer").get(1).getText());
+        Assert.assertEquals("http://oss-cn-chengdu.aliyuncs.com", root.getChild("RefererBlacklist").getChildren("Referer").get(0).getText());
+        Assert.assertEquals("https://oss-cn-chengdu.aliyuncs.com", root.getChild("RefererBlacklist").getChildren("Referer").get(1).getText());
+    }
+
+    @Test
+    public void testSetBucketCallbackPolicyRequestMarshaller() {
+        String policyName = "test1";
+        String callbackContent = "{\"callbackUrl\":\"www.abc.com/callback\",\"callbackBody\":\"${etag}\"}";
+        String callbackVarContent = "{\n" +
+                "\"x:var1\":\"value1\",\n" +
+                "\"x:var2\":\"value2\"\n" +
+                "}";
+
+        String policyName2 = "test_2";
+        String callbackContent2 = "{\n" +
+                "\"callbackUrl\":\"42.192.82.9:9001/index.php?route=test/test/test\",\n" +
+                "\"callbackHost\":\"42.192.82.9\",\n" +
+                "\"callbackBody\":\"{\\\"mimeType\\\":${mimeType},\\\"size\\\":${size}}\",\n" +
+                "\"callbackBodyType\":\"application/json\"\n" +
+                "}";
+        String callbackVarContent2 = "{\n" +
+                "\"key1\":\"val1\",\n" +
+                "\"key2\":\"val2\"\n" +
+                "}";
+        String callback = BinaryUtil.toBase64String(callbackContent.getBytes());
+        String callback2 = BinaryUtil.toBase64String(callbackContent2.getBytes());
+        String callbackVar = BinaryUtil.toBase64String(callbackVarContent.getBytes());
+        String callbackVar2 = BinaryUtil.toBase64String(callbackVarContent2.getBytes());
+        List<PolicyCallbackItem> policyCallbackItems = new ArrayList<PolicyCallbackItem>();
+        PolicyCallbackItem policyCallbackItem = new PolicyCallbackItem(policyName, callback).withCallbackVar(callbackVar);
+        policyCallbackItem.setPolicyName(policyName);
+        policyCallbackItem.setCallback(callback);
+        policyCallbackItem.setCallbackVar(callbackVar);
+
+        PolicyCallbackItem policyCallbackItem2 = new PolicyCallbackItem(policyName2, callback2).withCallbackVar(callbackVar2);
+        policyCallbackItem2.setPolicyName(policyName2);
+        policyCallbackItem2.setCallback(callback2);
+        policyCallbackItem2.setCallbackVar(callbackVar2);
+
+        policyCallbackItems.add(policyCallbackItem);
+        policyCallbackItems.add(policyCallbackItem2);
+        SetBucketCallbackPolicyRequest setBucketCallbackPolicyRequest = new SetBucketCallbackPolicyRequest("bucket").withPolicyCallbackItems(policyCallbackItems);
+
+
+        byte[] data = setBucketCallbackPolicyRequestMarshaller.marshall(setBucketCallbackPolicyRequest);
+        ByteArrayInputStream is = new ByteArrayInputStream(data);
+
+        SAXBuilder builder = new SAXBuilder();
+        Document doc = null;
+        try {
+            doc = builder.build(is);
+        } catch (JDOMException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        Element root = doc.getRootElement();
+        String policyNameReturn = root.getChildren("PolicyItem").get(0).getChildText("PolicyName");
+        String callbackReturn = root.getChildren("PolicyItem").get(0).getChildText("Callback");
+        String callbackVarReturn = root.getChildren("PolicyItem").get(0).getChildText("CallbackVar");
+        String policyNameReturn2 = root.getChildren("PolicyItem").get(1).getChildText("PolicyName");
+        String callbackReturn2 = root.getChildren("PolicyItem").get(1).getChildText("Callback");
+        String callbackVarReturn2 = root.getChildren("PolicyItem").get(1).getChildText("CallbackVar");
+
+        Assert.assertEquals(policyName, policyNameReturn);
+        Assert.assertEquals(callback, callbackReturn);
+        Assert.assertEquals(callbackVar, callbackVarReturn);
+        Assert.assertEquals(policyName2, policyNameReturn2);
+        Assert.assertEquals(callback2, callbackReturn2);
+        Assert.assertEquals(callbackVar2, callbackVarReturn2);
+    }
+
+    @Test
+    public void testAsyncProcessObjectRequestMarshaller() {
+        String saveAsKey = "outobjprefix.mp4";
+        String originalVideo = "test-video.mp4/example.mp4";
+        String bucketName = "example-bucket";
+        StringBuilder styleBuilder = new StringBuilder();
+        styleBuilder.append("test-video.mp4/convert,f_mp4,vcodec_h265,s_1920x1080,vb_2000000,fps_30,acodec_aac,ab_100000,sn_1");  // resize
+        styleBuilder.append("|sys/saveas,");
+        styleBuilder.append("o_" + BinaryUtil.toBase64String(saveAsKey.getBytes()).replaceAll("=", ""));
+        styleBuilder.append(",");
+        styleBuilder.append("b_" + BinaryUtil.toBase64String(bucketName.getBytes()).replaceAll("=", ""));
+        AsyncProcessObjectRequest request = new AsyncProcessObjectRequest(bucketName, originalVideo, styleBuilder.toString());
+
+        byte[] data = asyncProcessObjectRequestMarshaller.marshall(request);
+
+        String returnData = new String(data);
+
+        String style = styleBuilder.toString();
+
+        Assert.assertTrue(returnData.equals("x-oss-async-process="+style.replaceAll("=","")));
+    }
+
+
+    @Test
+    public void testPutLifeCycleFilterObjectSizeThanRequestMarshaller() {
+        SetBucketLifecycleRequest request = new SetBucketLifecycleRequest("bucket");
+        String ruleId0 = "rule-object-size";
+        String matchPrefix0 = "object-size/";
+        Map<String, String> matchTags0 = new HashMap<String, String>();
+        matchTags0.put("object-size-key", "object-size-value");
+        LifecycleRule rule = new LifecycleRule(ruleId0, matchPrefix0, LifecycleRule.RuleStatus.Enabled, 3);
+        rule.setTags(matchTags0);
+        LifecycleFilter filter = new LifecycleFilter();
+        LifecycleNot not = new LifecycleNot();
+        List<LifecycleNot> notList = new ArrayList<LifecycleNot>();
+        Tag tag = new Tag("key","value");
+        not.setPrefix("not-prefix");
+        not.setTag(tag);
+        notList.add(not);
+        filter.setObjectSizeGreaterThan(100L);
+        filter.setObjectSizeLessThan(1000L);
+        filter.setNotList(notList);
+        rule.setFilter(filter);
+        request.AddLifecycleRule(rule);
+
+        FixedLengthInputStream is = setBucketLifecycleRequestMarshaller.marshall(request);
+
+        SAXBuilder builder = new SAXBuilder();
+        Document doc = null;
+        try {
+            doc = builder.build(is);
+        } catch (JDOMException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        Element root = doc.getRootElement();
+        Assert.assertEquals(matchPrefix0, root.getChild("Rule").getChildText("Prefix"));
+        Assert.assertEquals(Long.valueOf(100), Long.valueOf(root.getChild("Rule").getChild("Filter").getChildText("ObjectSizeGreaterThan")));
+        Assert.assertEquals(Long.valueOf(1000), Long.valueOf(root.getChild("Rule").getChild("Filter").getChildText("ObjectSizeLessThan")));
+        Assert.assertEquals("object-size/not-prefix", root.getChild("Rule").getChild("Filter").getChildren("Not").get(0).getChildText("Prefix"));
+        Assert.assertEquals("key", root.getChild("Rule").getChild("Filter").getChildren("Not").get(0).getChild("Tag").getChildText("Key"));
+        Assert.assertEquals("value", root.getChild("Rule").getChild("Filter").getChildren("Not").get(0).getChild("Tag").getChildText("Value"));
+    }
+
+    @Test
+    public void testArchiveDirectRead() {
+        String bucketName = "testBucket-archiveDirectRead";
+        try {
+            PutBucketArchiveDirectReadRequest readRequest = new PutBucketArchiveDirectReadRequest(bucketName, true);
+            byte[] data = putBucketArchiveDirectReadRequestMarshaller.marshall(readRequest);
+            ByteArrayInputStream is = new ByteArrayInputStream(data);
+            SAXBuilder builder = new SAXBuilder();
+            Document doc = null;
+            doc = builder.build(is);
+            Element root = doc.getRootElement();
+            Assert.assertEquals("true", root.getChildText("Enabled"));
+        } catch (JDOMException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        try {
+            PutBucketArchiveDirectReadRequest readRequest = new PutBucketArchiveDirectReadRequest(bucketName, false);
+            byte[] data = putBucketArchiveDirectReadRequestMarshaller.marshall(readRequest);
+            ByteArrayInputStream is = new ByteArrayInputStream(data);
+            SAXBuilder builder = new SAXBuilder();
+            Document doc = null;
+            doc = builder.build(is);
+            Element root = doc.getRootElement();
+            Assert.assertEquals("false", root.getChildText("Enabled"));
+        } catch (JDOMException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void testPutBucketHttpsConfigRequestMarshaller() {
+        final String bucketName = "unormal-set-bucket-referer";
+        final String tls12 = "TLSv1.2";
+        final String tls13 = "TLSv1.3";
+
+        List<String> tlsVersionList = new ArrayList<String>();
+        tlsVersionList.add(tls12);
+        tlsVersionList.add(tls13);
+
+        PutBucketHttpsConfigRequest request = new PutBucketHttpsConfigRequest(bucketName)
+                .withEnabled(true)
+                .withTlsVersion(tlsVersionList);
+
+        byte[] data = putBucketHttpsConfigRequestMarshaller.marshall(request);
+        ByteArrayInputStream is = new ByteArrayInputStream(data);
+
+        SAXBuilder builder = new SAXBuilder();
+        Document doc = null;
+        try {
+            doc = builder.build(is);
+        } catch (JDOMException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        Element root = doc.getRootElement();
+        Assert.assertEquals("true", root.getChild("TLS").getChildText("Enable"));
+        Assert.assertEquals("TLSv1.2", root.getChild("TLS").getChildren("TLSVersion").get(0).getText());
+        Assert.assertEquals("TLSv1.3", root.getChild("TLS").getChildren("TLSVersion").get(1).getText());
+
+    }
+
+    @Test
+    public void testPutPublicAccessBlockMarshaller() {
+        final String bucketName = "unormal-set-public-block";
+
+        PutPublicAccessBlockRequest request = new PutPublicAccessBlockRequest()
+                .withBlockPublicAccess(true);
+
+        byte[] data = putPublicAccessBlockRequestMarshaller.marshall(request);
+        ByteArrayInputStream is = new ByteArrayInputStream(data);
+
+        SAXBuilder builder = new SAXBuilder();
+        Document doc = null;
+        try {
+            doc = builder.build(is);
+        } catch (JDOMException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        Element root = doc.getRootElement();
+        Assert.assertEquals("true", root.getChildText("BlockPublicAccess"));
+
+    }
+
+    @Test
+    public void testPutBucketPublicAccessBlockMarshaller() {
+        final String bucketName = "unormal-set-bucket-block";
+
+        PutBucketPublicAccessBlockRequest request = new PutBucketPublicAccessBlockRequest(bucketName)
+                .withBlockPublicAccess(true);
+
+        byte[] data = putBucketPublicAccessBlockRequestMarshaller.marshall(request);
+        ByteArrayInputStream is = new ByteArrayInputStream(data);
+
+        SAXBuilder builder = new SAXBuilder();
+        Document doc = null;
+        try {
+            doc = builder.build(is);
+        } catch (JDOMException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        Element root = doc.getRootElement();
+        Assert.assertEquals("true", root.getChildText("BlockPublicAccess"));
+
+    }
+
+    @Test
+    public void testCreateAccessPoint() {
+        String accessPointName = "test-ap-jt-3";
+        String networkOrigin = "Internet";
+        String vpcId = "vpc-id";
+        String bucketName = "testBucket";
+
+        CreateAccessPointRequest createAccessPointRequest = new CreateAccessPointRequest(bucketName)
+                .withAccessPointName(accessPointName)
+                .withNetworkOrigin(networkOrigin)
+                .withVpc(new AccessPointVpcConfiguration().withVpcId(vpcId));
+
+        byte[] data = createAccessPointRequestParser.marshall(createAccessPointRequest);
+        ByteArrayInputStream is = new ByteArrayInputStream(data);
+
+        SAXBuilder builder = new SAXBuilder();
+        Document doc = null;
+        try {
+            doc = builder.build(is);
+        } catch (JDOMException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        Element root = doc.getRootElement();
+
+        Assert.assertEquals(accessPointName, root.getChildText("AccessPointName"));
+        Assert.assertEquals(networkOrigin, root.getChildText("NetworkOrigin"));
+        Assert.assertEquals(vpcId, root.getChild("VpcConfiguration").getChildText("VpcId"));
+    }
+
+    @Test
+    public void testCreateAccessPointPolicy() {
+        String bucketName = "testBucket";
+        String accessPointName = "test-ap-jt-3";
+        String accessPointPolicy = "{\"Version\":\"1\",\"Statement\":[{\"Action\":[\"oss:PutObject\",\"oss:GetObject\"],\"Effect\":\"Deny\",\"Principal\":[\"1234567890\"],\"Resource\":[\"acs:oss:*:1234567890:*/*\"]}]}";
+
+        PutAccessPointPolicyRequest putAccessPointPolicyRequest = new PutAccessPointPolicyRequest(bucketName)
+                .withAccessPointName(accessPointName)
+                .withAccessPointPolicy(accessPointPolicy);
+
+        byte[] data = putAccessPointPolicyRequestParser.marshall(putAccessPointPolicyRequest);
+        ByteArrayInputStream is = new ByteArrayInputStream(data);
+
+        String returnData = new String(data);
+
+        Assert.assertEquals(accessPointPolicy, returnData);
+
+    }
+
 }

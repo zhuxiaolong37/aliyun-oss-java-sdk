@@ -143,7 +143,7 @@ public class BucketCnameTest extends TestBase {
 
     @Test
     public void testUnormaladdBucketCname() {
-        final String bucketName = "unormal-set-bucket-cname";
+        final String bucketName = genBucketName() + "-cname";
 
         // parameter invalid
         try {
@@ -204,7 +204,7 @@ public class BucketCnameTest extends TestBase {
                 ossClient.addBucketCname(new AddBucketCnameRequest(bucketName).withDomain("your.com"));
                 Assert.fail("Set bucket cname should not be successful");
             } catch (OSSException e) {
-                Assert.assertEquals("NoSuchCnameInRecord", e.getErrorCode());
+                Assert.assertEquals("NeedVerifyDomainOwnership", e.getErrorCode());
             }
 
         } catch (Exception e) {
@@ -216,13 +216,12 @@ public class BucketCnameTest extends TestBase {
 
     @Test
     public void testBucketCnameToken() {
-        final String endpoint = "oss-ap-southeast-2.aliyuncs.com";
-        final String bucketName = super.bucketName + "-bucket-cname";
+        final String bucketName = genBucketName() + "-bucket-cname";
 
         //create client
         ClientConfiguration conf = new ClientBuilderConfiguration();
         Credentials credentials = new DefaultCredentials(TestConfig.OSS_TEST_ACCESS_KEY_ID, TestConfig.OSS_TEST_ACCESS_KEY_SECRET);
-        OSS client = new OSSClient(endpoint, new DefaultCredentialProvider(credentials), conf);
+        OSS client = new OSSClient(TestConfig.OSS_TEST_ENDPOINT, new DefaultCredentialProvider(credentials), conf);
 
         client.createBucket(bucketName);
         CreateBucketCnameTokenResult cresult;
@@ -252,6 +251,59 @@ public class BucketCnameTest extends TestBase {
             Assert.assertTrue(false);
         } catch (ServiceException e) {
             Assert.assertEquals("CnameTokenNotFound", e.getErrorCode());
+        }
+    }
+
+    @Ignore
+    @Test
+    public void testGetBucketCname() {
+
+        final String bucketName = "normal-get-bucket-cname";
+        Date curDate;
+
+        try {
+            ossClient.createBucket(bucketName);
+
+            // set multi cname
+            for (String domain : domains) {
+                CreateBucketCnameTokenRequest createBucketCnameTokenRequest = new CreateBucketCnameTokenRequest(bucketName);
+                createBucketCnameTokenRequest.setDomain(domain);
+                ossClient.createBucketCnameToken(createBucketCnameTokenRequest);
+
+                AddBucketCnameRequest request = new AddBucketCnameRequest(bucketName);
+                request.setDomain(domain);
+                ossClient.addBucketCname(request);
+            }
+
+            waitForCacheExpiration(5);
+
+            curDate = new Date(System.currentTimeMillis());
+
+            List<CnameConfiguration> cnames = ossClient.getBucketCname(bucketName);
+            Assert.assertEquals(cnames.size(), domains.length);
+            for (int i = 0; i < cnames.size(); i++) {
+                System.out.println(cnames.get(i));
+                Assert.assertEquals(cnames.get(i).getDomain(), domains[i]);
+                Assert.assertEquals(cnames.get(i).getStatus(), CnameConfiguration.CnameStatus.Enabled);
+                Assert.assertEquals(cnames.get(i).getLastMofiedTime().getYear(), curDate.getYear());
+                Assert.assertEquals(cnames.get(i).getLastMofiedTime().getMonth(), curDate.getMonth());
+                Assert.assertEquals(cnames.get(i).getLastMofiedTime().getDay(), curDate.getDay());
+            }
+
+            for (String domain : domains) {
+                DeleteBucketCnameRequest req = new DeleteBucketCnameRequest(bucketName);
+                req.setDomain(domain);
+                ossClient.deleteBucketCname(req);
+            }
+
+            cnames = ossClient.getBucketCname(bucketName);
+            Assert.assertEquals(cnames.size(), 0);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail(e.getMessage());
+        } finally {
+            ossClient.deleteBucket(bucketName);
         }
     }
 }

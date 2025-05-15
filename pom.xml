@@ -4,7 +4,7 @@
 
     <groupId>com.aliyun.oss</groupId>
     <artifactId>aliyun-sdk-oss</artifactId>
-    <version>3.16.1</version>
+    <version>3.18.2</version>
     <packaging>jar</packaging>
     <name>Aliyun OSS SDK for Java</name>
     <description>The Aliyun OSS SDK for Java used for accessing Aliyun Object Storage Service</description>
@@ -24,7 +24,7 @@
         <dependency>
             <groupId>org.codehaus.jettison</groupId>
             <artifactId>jettison</artifactId>
-            <version>1.5.2</version>
+            <version>1.5.4</version>
         </dependency>
         <dependency>
             <groupId>com.aliyun</groupId>
@@ -52,6 +52,23 @@
             <artifactId>junit</artifactId>
             <version>4.13.1</version>
             <scope>test</scope>
+        </dependency>
+        <!--dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk15on</artifactId>
+            <version>1.67</version>
+            <scope>test</scope>
+        </dependency-->
+        <!--dependency>
+            <groupId>com.aliyun.kms</groupId>
+            <artifactId>kms-transfer-client</artifactId>
+            <version>0.1.0</version>
+            <scope>test</scope>
+        </dependency-->
+        <dependency>
+            <groupId>com.aliyun</groupId>
+            <artifactId>java-trace-api</artifactId>
+            <version>0.2.11-beta</version>
         </dependency>
     </dependencies>
 
@@ -94,9 +111,6 @@
                     <execution>
                         <id>run-test</id>
                         <phase>test</phase>
-                        <goals>
-                            <goal>test</goal>
-                        </goals>
                         <configuration>
                             <excludes>
                                 <exclude>**/integration/*.java</exclude>

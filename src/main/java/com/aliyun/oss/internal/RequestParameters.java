@@ -123,6 +123,7 @@ public final class RequestParameters {
     public static final String COMP_GET = "get";
     public static final String COMP_QUERY = "query";
     public static final String META_QUERY = "metaQuery";
+    public static final String MODE = "mode";
 
     public static final String STAT = "stat";
     public static final String HISTORY = "history";
@@ -156,5 +157,16 @@ public final class RequestParameters {
     public static final String ACCESS_MONITOR = "accessmonitor";
 
     public static final String SUBRESOURCE_REGION_LIST = "regionList";
-
+    public static final String REGIONS = "regions";
+    public static final String X_OSS_ASYNC_PROCESS = "x-oss-async-process";
+    public static final String WRITE_GET_OBJECT_RESPONSE = "x-oss-write-get-object-response";
+    public static final String ARCHIVE_DIRECT_READ = "bucketArchiveDirectRead";
+    public static final String HTTPS_CONFIG = "httpsConfig";
+    public static final String PUBLIC_ACCESS_BLOCK = "publicAccessBlock";
+    public static final String POLICY_STATUS = "policyStatus";
+    public static final String REDUNDANCY_TRANSITION = "redundancyTransition";
+    public static final String X_OSS_TARGET_REDUNDANCY_TYPE = "x-oss-target-redundancy-type";
+    public static final String X_OSS_REDUNDANCY_TRANSITION_TASK_ID = "x-oss-redundancy-transition-taskid";
+    public static final String SUBRESOURCE_ACCESS_POINT = "accessPoint";
+    public static final String SUBRESOURCE_ACCESS_POINT_POLICY = "accessPointPolicy";
 }

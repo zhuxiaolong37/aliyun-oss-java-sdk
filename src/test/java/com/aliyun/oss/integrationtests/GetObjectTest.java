@@ -35,6 +35,7 @@ import static com.aliyun.oss.internal.OSSConstants.DEFAULT_OBJECT_CONTENT_TYPE;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Date;
@@ -44,6 +45,13 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.aliyun.oss.ClientConfiguration;
+import com.aliyun.oss.OSSClient;
+import com.aliyun.oss.common.auth.Credentials;
+import com.aliyun.oss.common.auth.DefaultCredentialProvider;
+import com.aliyun.oss.common.auth.DefaultCredentials;
+import com.aliyun.oss.common.utils.HttpUtil;
+import com.aliyun.oss.internal.OSSUtils;
 import junit.framework.Assert;
 
 import org.junit.Ignore;
@@ -501,7 +509,7 @@ public class GetObjectTest extends TestBase {
         final long inputStreamLength = 128 * 1024; //128KB
         //TODO: With chinese characters will be failed. 
         final String metaKey0 = "tag";
-        final String metaValue0 = "元值0";
+        final String metaValue0 = HttpUtil.urlEncode("元值0", true);
         
         try {
             ObjectMetadata metadata = new ObjectMetadata();
@@ -740,6 +748,48 @@ public class GetObjectTest extends TestBase {
             
             rawExpiresValue = o.getObjectMetadata().getRawExpiresValue();
             Assert.assertEquals(illegalExpires, rawExpiresValue);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testGetObjectVerifyStrict() {
+        final String key = "?测\\r试-中.~,+\"'*&￥#@%！（文）+字符|？/.zip";
+        final long inputStreamLength = 128 * 1024; //128KB
+
+        try {
+            PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, key,
+                    genFixedLengthInputStream(inputStreamLength));
+            ossClient.putObject(putObjectRequest);
+            Assert.assertTrue(ossClient.getClientConfiguration().isVerifyObjectStrict());
+
+            GetObjectRequest getObjectRequest = new GetObjectRequest(bucketName, key);
+            OSSObject o = ossClient.getObject(getObjectRequest);
+            Assert.assertEquals(bucketName, o.getBucketName());
+            Assert.assertEquals(key, o.getKey());
+            Assert.assertEquals(o.getRequestId().length(), REQUEST_ID_LEN);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+
+        try {
+            ClientConfiguration conf = new ClientConfiguration();
+            conf.setVerifyObjectStrictEnable(false);
+            Credentials credentials = new DefaultCredentials(TestConfig.OSS_TEST_ACCESS_KEY_ID, TestConfig.OSS_TEST_ACCESS_KEY_SECRET);
+            OSSClient ossClient1 = new OSSClient(TestConfig.OSS_TEST_ENDPOINT, new DefaultCredentialProvider(credentials), conf);
+            Assert.assertFalse(ossClient1.getClientConfiguration().isVerifyObjectStrict());
+
+            PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, key,
+                    genFixedLengthInputStream(inputStreamLength));
+            ossClient1.putObject(putObjectRequest);
+
+            // Override 1
+            GetObjectRequest getObjectRequest = new GetObjectRequest(bucketName, key);
+            OSSObject o = ossClient1.getObject(getObjectRequest);
+            Assert.assertEquals(bucketName, o.getBucketName());
+            Assert.assertEquals(key, o.getKey());
+            Assert.assertEquals(o.getRequestId().length(), REQUEST_ID_LEN);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }

@@ -32,29 +32,8 @@ import static com.aliyun.oss.event.ProgressPublisher.publishProgress;
 import static com.aliyun.oss.internal.OSSConstants.DEFAULT_BUFFER_SIZE;
 import static com.aliyun.oss.internal.OSSConstants.DEFAULT_CHARSET_NAME;
 import static com.aliyun.oss.internal.OSSHeaders.OSS_SELECT_OUTPUT_RAW;
-import static com.aliyun.oss.internal.OSSUtils.OSS_RESOURCE_MANAGER;
-import static com.aliyun.oss.internal.OSSUtils.addDateHeader;
-import static com.aliyun.oss.internal.OSSUtils.addHeader;
-import static com.aliyun.oss.internal.OSSUtils.addStringListHeader;
-import static com.aliyun.oss.internal.OSSUtils.determineInputStreamLength;
-import static com.aliyun.oss.internal.OSSUtils.ensureBucketNameValid;
-import static com.aliyun.oss.internal.OSSUtils.ensureObjectKeyValid;
-import static com.aliyun.oss.internal.OSSUtils.ensureCallbackValid;
-import static com.aliyun.oss.internal.OSSUtils.joinETags;
-import static com.aliyun.oss.internal.OSSUtils.populateRequestMetadata;
-import static com.aliyun.oss.internal.OSSUtils.populateResponseHeaderParameters;
-import static com.aliyun.oss.internal.OSSUtils.populateRequestCallback;
-import static com.aliyun.oss.internal.OSSUtils.removeHeader;
-import static com.aliyun.oss.internal.OSSUtils.safeCloseResponse;
-import static com.aliyun.oss.internal.RequestParameters.ENCODING_TYPE;
-import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_ACL;
-import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_DELETE;
-import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_OBJECTMETA;
-import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_SYMLINK;
-import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_TAGGING;
-import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_DIR;
-import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_RENAME;
-import static com.aliyun.oss.internal.RequestParameters.SUBRESOURCE_DIR_DELETE;
+import static com.aliyun.oss.internal.OSSUtils.*;
+import static com.aliyun.oss.internal.RequestParameters.*;
 import static com.aliyun.oss.internal.ResponseParsers.appendObjectResponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.copyObjectResponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.deleteObjectsResponseParser;
@@ -69,21 +48,19 @@ import static com.aliyun.oss.internal.ResponseParsers.headObjectResponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.deleteVersionsResponseParser;
 import static com.aliyun.oss.internal.ResponseParsers.deleteDirectoryResponseParser;
 
-import java.io.BufferedOutputStream;
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
+import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.zip.CheckedInputStream;
 
+import com.aliyun.oss.common.auth.Credentials;
+import com.aliyun.oss.common.auth.RequestPresigner;
+import com.aliyun.oss.common.auth.ServiceSignature;
+import com.aliyun.oss.common.comm.SignVersion;
+import com.aliyun.oss.internal.signer.OSSSignerBase;
+import com.aliyun.oss.internal.signer.OSSSignerParams;
+import com.aliyun.oss.internal.signer.OSSV4Signer;
 import com.aliyun.oss.model.*;
 
 import com.aliyun.oss.ClientException;
@@ -243,6 +220,7 @@ public class OSSObjectOperation extends OSSOperation {
             while (warppedStream.read() != -1) {
                 //read until eof
             }
+            warppedStream.close();
             return selectObjectMetadata;
         } catch (IOException e) {
             publishProgress(selectProgressListener, ProgressEventType.SELECT_FAILED_EVENT);
@@ -1281,6 +1259,203 @@ public class OSSObjectOperation extends OSSOperation {
         populateTrafficLimitHeader(headers, getObjectRequest.getTrafficLimit());
     }
 
+    public AsyncProcessObjectResult asyncProcessObject(AsyncProcessObjectRequest asyncProcessObjectRequest) throws OSSException, ClientException {
+
+        assertParameterNotNull(asyncProcessObjectRequest, "asyncProcessObjectRequest");
+
+        String bucketName = asyncProcessObjectRequest.getBucketName();
+        String key = asyncProcessObjectRequest.getKey();
+        String process = asyncProcessObjectRequest.getProcess();
+
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+        assertParameterNotNull(key, "key");
+        ensureObjectKeyValid(key);
+        assertStringNotNullOrEmpty(process, "process");
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.X_OSS_ASYNC_PROCESS, null);
+
+        Map<String, String> headers = new HashMap<String, String>();
+        populateRequestPayerHeader(headers, asyncProcessObjectRequest.getRequestPayer());
+
+        byte[] rawContent = asyncProcessObjectRequestMarshaller.marshall(asyncProcessObjectRequest);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(asyncProcessObjectRequest))
+                .setMethod(HttpMethod.POST).setBucket(bucketName).setKey(key).setHeaders(headers).setParameters(params)
+                .setInputSize(rawContent.length).setInputStream(new ByteArrayInputStream(rawContent))
+                .setOriginalRequest(asyncProcessObjectRequest).build();
+
+        return doOperation(request, ResponseParsers.asyncProcessObjectResponseParser, bucketName, key, true);
+    }
+
+    public VoidResult writeGetObjectResponse(WriteGetObjectResponseRequest writeGetObjectResponseRequest) throws OSSException, ClientException {
+
+        assertParameterNotNull(writeGetObjectResponseRequest, "writeGetObjectResponseRequest");
+        assertParameterNotNull(writeGetObjectResponseRequest.getRoute(), "route");
+
+        ObjectMetadata metadata = writeGetObjectResponseRequest.getMetadata();
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(WRITE_GET_OBJECT_RESPONSE, null);
+
+        if (metadata == null) {
+            metadata = new ObjectMetadata();
+        }
+
+        Map<String, String> headers = writeGetObjectResponseRequest.getHeaders();
+        addHeaderIfNotNull(headers, OSSHeaders.OSS_REQUEST_ROUTE, writeGetObjectResponseRequest.getRoute());
+        addHeaderIfNotNull(headers, OSSHeaders.OSS_REQUEST_TOKEN, writeGetObjectResponseRequest.getToken());
+        addHeaderIfNotNull(headers, OSSHeaders.OSS_FWD_STATUS, String.valueOf(writeGetObjectResponseRequest.getStatus()));
+        populateRequestMetadata(headers, metadata);
+
+
+        InputStream originalInputStream = writeGetObjectResponseRequest.getInputStream();
+        InputStream repeatableInputStream = null;
+        if (writeGetObjectResponseRequest.getFile() != null) {
+            File toUpload = writeGetObjectResponseRequest.getFile();
+
+            if (!checkFile(toUpload)) {
+                getLog().info("Illegal file path: " + toUpload.getPath());
+                throw new ClientException("Illegal file path: " + toUpload.getPath());
+            }
+
+            metadata.setContentLength(toUpload.length());
+
+            try {
+                repeatableInputStream = new RepeatableFileInputStream(toUpload);
+            } catch (IOException ex) {
+                logException("Cannot locate file to upload: ", ex);
+                throw new ClientException("Cannot locate file to upload: ", ex);
+            }
+        } else {
+            assertTrue(originalInputStream != null, "Please specify input stream or file to upload");
+            try {
+                metadata.setContentLength(Long.valueOf(originalInputStream.available()));
+                repeatableInputStream = newRepeatableInputStream(originalInputStream);
+            } catch (IOException ex) {
+                logException("Cannot wrap to repeatable input stream: ", ex);
+                throw new ClientException("Cannot wrap to repeatable input stream: ", ex);
+            }
+        }
+
+        Long contentLength = (Long) metadata.getRawMetadata().get(OSSHeaders.CONTENT_LENGTH);
+        contentLength = contentLength == null ? -1 : contentLength.longValue();
+
+        if (contentLength < 0 || !repeatableInputStream.markSupported()) {
+            contentLength = Long.valueOf(-1);
+        }
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(OSSUtils.toEndpointURI(writeGetObjectResponseRequest.getRoute(), this.client.getClientConfiguration().getProtocol().toString()))
+                .setMethod(HttpMethod.POST).setParameters(params).setHeaders(headers)
+                .setInputStream(repeatableInputStream).setInputSize(contentLength)
+                .setOriginalRequest(writeGetObjectResponseRequest).build();
+
+        return doOperation(request, requestIdResponseParser, null, null, true);
+    }
+
+    public URL generatePresignedUrl(GeneratePresignedUrlRequest request) throws ClientException {
+        assertParameterNotNull(request, "request");
+        assertStringNotNullOrEmpty(request.getBucketName(), "bucket");
+        ensureBucketNameValid(request.getBucketName());
+        assertParameterNotNull(request.getKey(), "key");
+        ensureObjectKeyValid(request.getKey());
+        assertParameterNotNull(request.getExpiration(), "expiration");
+
+        Credentials credentials = credsProvider.getCredentials();
+        assertParameterNotNull(credentials, "credentials");
+
+        String bucketName = request.getBucketName();
+        boolean useSecurityToken = credentials.useSecurityToken();
+        HttpMethod method = request.getMethod() != null ? request.getMethod() : HttpMethod.GET;
+
+        String key = request.getKey();
+        String resourcePath = OSSUtils.determineResourcePath(bucketName, key, client.getClientConfiguration().isSLDEnabled());
+
+        RequestMessage requestMessage = new RequestMessage(bucketName, key);
+        requestMessage.setEndpoint(OSSUtils.determineFinalEndpoint(endpoint, bucketName, client.getClientConfiguration()));
+        requestMessage.setMethod(method);
+        requestMessage.setResourcePath(resourcePath);
+        requestMessage.setHeaders(request.getHeaders());
+
+        if (request.getContentType() != null && !request.getContentType().trim().equals("")) {
+            requestMessage.addHeader(HttpHeaders.CONTENT_TYPE, request.getContentType());
+        }
+        if (request.getContentMD5() != null && !request.getContentMD5().trim().equals("")) {
+            requestMessage.addHeader(HttpHeaders.CONTENT_MD5, request.getContentMD5());
+        }
+        for (Map.Entry<String, String> h : request.getUserMetadata().entrySet()) {
+            requestMessage.addHeader(OSSHeaders.OSS_USER_METADATA_PREFIX + h.getKey(), h.getValue());
+        }
+        Map<String, String> responseHeaderParams = new HashMap<String, String>();
+        populateResponseHeaderParameters(responseHeaderParams, request.getResponseHeaders());
+        populateTrafficLimitParams(responseHeaderParams, request.getTrafficLimit());
+        if (responseHeaderParams.size() > 0) {
+            requestMessage.setParameters(responseHeaderParams);
+        }
+
+        if (request.getQueryParameter() != null && request.getQueryParameter().size() > 0) {
+            for (Map.Entry<String, String> entry : request.getQueryParameter().entrySet()) {
+                requestMessage.addParameter(entry.getKey(), entry.getValue());
+            }
+        }
+
+        if (request.getProcess() != null && !request.getProcess().trim().equals("")) {
+            requestMessage.addParameter(RequestParameters.SUBRESOURCE_PROCESS, request.getProcess());
+        }
+
+        String canonicalResource = "/" + ((bucketName != null) ? bucketName + "/" : "") + ((key != null ? key : ""));
+        OSSSignerParams params = new OSSSignerParams(canonicalResource, credentials);
+        params.setProduct(product);
+        params.setRegion(region);
+        params.setCloudBoxId(cloudBoxId);
+        params.setExpiration(request.getExpiration());
+        params.setAdditionalHeaderNames(request.getAdditionalHeaderNames());
+        RequestPresigner singer = OSSSignerBase.createRequestPresigner(client.getClientConfiguration().getSignatureVersion(), params);
+
+        singer.presign(requestMessage);
+
+        String queryString = HttpUtil.paramToQueryString(requestMessage.getParameters(), DEFAULT_CHARSET_NAME);
+
+        String url = requestMessage.getEndpoint().toString();
+        if (!url.endsWith("/")) {
+            url += "/";
+        }
+        url += resourcePath + "?" + queryString;
+
+        try {
+            return new URL(url);
+        } catch (MalformedURLException e) {
+            throw new ClientException(e);
+        }
+    }
+
+    public String calculatePostSignature(String postPolicy, Date date) throws ClientException {
+        try {
+            byte[] binaryData = postPolicy.getBytes(DEFAULT_CHARSET_NAME);
+            String encPolicy = BinaryUtil.toBase64String(binaryData);
+            SignVersion signVersion = client.getClientConfiguration().getSignatureVersion();
+            if (SignVersion.V4.equals(signVersion)) {
+                OSSSignerParams params = new OSSSignerParams("", credsProvider.getCredentials());
+                params.setProduct(product);
+                params.setRegion(region);
+                params.setCloudBoxId(cloudBoxId);
+                OSSV4Signer singer = (OSSV4Signer)OSSSignerBase.createRequestSigner(signVersion, params);
+                return singer.signPolicy(encPolicy, date);
+            } else {
+                return ServiceSignature.create().computeSignature(credsProvider.getCredentials().getSecretAccessKey(),
+                        encPolicy);
+            }
+        } catch (UnsupportedEncodingException ex) {
+            throw new ClientException("Unsupported charset: " + ex.getMessage());
+        }
+    }
+
+    private static void addHeaderIfNotNull(Map<String, String> headers, String header, String value) {
+        if (value != null) {
+            headers.put(header, value);
+        }
+    }
+
     private static void addDeleteObjectsRequiredHeaders(Map<String, String> headers, byte[] rawContent) {
         headers.put(HttpHeaders.CONTENT_LENGTH, String.valueOf(rawContent.length));
 
@@ -1350,4 +1525,9 @@ public class OSSObjectOperation extends OSSOperation {
         }
     }
 
+    private static void populateTrafficLimitParams(Map<String, String> params, int limit) {
+        if (limit > 0) {
+            params.put(RequestParameters.OSS_TRAFFIC_LIMIT, String.valueOf(limit));
+        }
+    }
 }

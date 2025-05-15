@@ -52,14 +52,16 @@ public class BucketAclTest extends TestBase {
     
     @Test
     public void testNormalSetBucketAcl() {
-        final String bucketName = super.bucketName + "normal-set-bucket-acl";
+        final String bucketName = genBucketName() + "normal-set-bucket-acl";
         
         try {
             ossClient.createBucket(bucketName);
+            Thread.sleep(2000);
             
             for (CannedAccessControlList acl : acls) {
                 ossClient.setBucketAcl(bucketName, acl);
-                
+                Thread.sleep(3000);
+
                 AccessControlList returnedAcl = ossClient.getBucketAcl(bucketName);
                 if (acl != null && !acl.equals(CannedAccessControlList.Private)) {
                     Set<Grant> grants = returnedAcl.getGrants();
@@ -90,7 +92,7 @@ public class BucketAclTest extends TestBase {
     
     @Test
     public void testUnormalSetBucketAcl() {
-        final String nonexistentBucket = super.bucketName + "unormal-set-bucket-acl";
+        final String nonexistentBucket = genBucketName() + "unormal-set-bucket-acl";
         
         try {            
             // set non-existent bucket
@@ -106,7 +108,7 @@ public class BucketAclTest extends TestBase {
             }
             
             // Set bucket without ownership
-            final String bucketWithoutOwnership = "oss";
+            final String bucketWithoutOwnership = "oss" + NOT_OWNERSHIP_BUCKET_SUFFIX;
             try {
                 ossClient.setBucketAcl(bucketWithoutOwnership, CannedAccessControlList.Private);
                 Assert.fail("Set bucket acl should not be successful");
@@ -133,7 +135,7 @@ public class BucketAclTest extends TestBase {
     @Test
     public void testUnormalGetBucketAcl() {
         // Get non-existent bucket
-        final String nonexistentBucket = super.bucketName + "unormal-get-bucket-acl";
+        final String nonexistentBucket = genBucketName() + "-bucket-acl";
         try {
             ossClient.getBucketAcl(nonexistentBucket);
             Assert.fail("Get bucket acl should not be successful");
@@ -143,7 +145,7 @@ public class BucketAclTest extends TestBase {
         }
         
         // Get bucket without ownership
-        final String bucketWithoutOwnership = "oss";
+        final String bucketWithoutOwnership = "oss" + NOT_OWNERSHIP_BUCKET_SUFFIX;
         try {
             ossClient.getBucketAcl(bucketWithoutOwnership);
             Assert.fail("Get bucket referer should not be successful");
@@ -152,7 +154,7 @@ public class BucketAclTest extends TestBase {
         }
         
         // Get bucket using default acl
-        final String bucketUsingDefaultAcl = "bucket-using-default-acl";
+        final String bucketUsingDefaultAcl = genBucketName() + "-default-acl";
         try {
             ossClient.createBucket(bucketUsingDefaultAcl);
             
@@ -169,7 +171,7 @@ public class BucketAclTest extends TestBase {
     
     @Test
     public void testUnormalDoesBucketExist() {
-        final String nonexistentBucket = super.bucketName + "unormal-does-bucket-exist";
+        final String nonexistentBucket = genBucketName() + "-exist";
         
         try {
             Credentials credentials = new DefaultCredentials(TestConfig.OSS_TEST_ACCESS_KEY_ID, TestConfig.OSS_TEST_ACCESS_KEY_SECRET);

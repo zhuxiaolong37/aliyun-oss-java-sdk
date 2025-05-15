@@ -20,16 +20,14 @@
 package com.aliyun.oss.internal;
 
 import static com.aliyun.oss.common.parser.RequestMarshallers.*;
-import static com.aliyun.oss.common.parser.RequestMarshallers.putBucketAccessMonitorRequestMarshaller;
 import static com.aliyun.oss.common.utils.CodingUtils.assertParameterNotNull;
 import static com.aliyun.oss.internal.OSSUtils.OSS_RESOURCE_MANAGER;
 import static com.aliyun.oss.internal.OSSUtils.ensureBucketNameValid;
 import static com.aliyun.oss.internal.OSSUtils.ensureBucketNameCreationValid;
 import static com.aliyun.oss.internal.OSSUtils.safeCloseResponse;
 import static com.aliyun.oss.internal.RequestParameters.*;
-import static com.aliyun.oss.internal.RequestParameters.ACCESS_MONITOR;
 import static com.aliyun.oss.internal.ResponseParsers.*;
-import static com.aliyun.oss.internal.ResponseParsers.getBucketAccessMonitorResponseParser;
+import static com.aliyun.oss.internal.ResponseParsers.listAccessPointsResponseParser;
 
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
@@ -2066,6 +2064,28 @@ public class OSSBucketOperation extends OSSOperation {
         return doOperation(request, requestIdResponseParser, bucketName, null, true);
     }
 
+    public VoidResult openMetaQuery(OpenMetaQueryRequest openMetaQueryRequest) throws OSSException, ClientException {
+        assertParameterNotNull(openMetaQueryRequest, "openMetaQueryRequest");
+
+        String bucketName = openMetaQueryRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        MetaQueryMode metaQueryMode = openMetaQueryRequest.getMetaQueryMode();
+        assertParameterNotNull(metaQueryMode, "metaQueryMode");
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(META_QUERY, null);
+        params.put(SUBRESOURCE_COMP, COMP_ADD);
+        params.put(MODE, metaQueryMode.toString());
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.POST).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(openMetaQueryRequest).setInputSize(0).setInputStream(new ByteArrayInputStream(new byte[0])).build();
+
+        return doOperation(request, requestIdResponseParser, bucketName, null, true);
+    }
+
     public GetMetaQueryStatusResult getMetaQueryStatus(GenericRequest genericRequest) throws OSSException, ClientException {
         assertParameterNotNull(genericRequest, "genericRequest");
 
@@ -2094,6 +2114,13 @@ public class OSSBucketOperation extends OSSOperation {
         params.put(META_QUERY, null);
         params.put(SUBRESOURCE_COMP, COMP_QUERY);
 
+        if (null != doMetaQueryRequest.getEncodingType()) {
+            params.put(ENCODING_TYPE, doMetaQueryRequest.getEncodingType());
+        }
+        if (null != doMetaQueryRequest.getMetaQueryMode()) {
+            params.put(MODE, doMetaQueryRequest.getMetaQueryMode().toString());
+        }
+
         byte[] rawContent = doMetaQueryRequestMarshaller.marshall(doMetaQueryRequest);
 
         RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
@@ -2120,4 +2147,532 @@ public class OSSBucketOperation extends OSSOperation {
 
         return doOperation(request, requestIdResponseParser, bucketName, null, true);
     }
+
+    public DescribeRegionsResult describeRegions(DescribeRegionsRequest describeRegionsRequest) throws OSSException, ClientException {
+        assertParameterNotNull(describeRegionsRequest, "describeRegionsRequest");
+
+        String bucketName = describeRegionsRequest.getBucketName();
+        String region = describeRegionsRequest.getRegion();
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(REGIONS, region);
+
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(describeRegionsRequest).build();
+
+        return doOperation(request, describeRegionsResponseParser, bucketName, null, true);
+    }
+
+    public VoidResult setBucketCallbackPolicy(SetBucketCallbackPolicyRequest setBucketCallbackPolicyRequest) throws OSSException, ClientException {
+
+        assertParameterNotNull(setBucketCallbackPolicyRequest, "setBucketCallbackPolicyRequest");
+
+        String bucketName = setBucketCallbackPolicyRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(SUBRESOURCE_POLICY, null);
+        params.put(SUBRESOURCE_COMP, SUBRESOURCE_CALLBACK);
+
+        byte[] rawContent = setBucketCallbackPolicyRequestMarshaller.marshall(setBucketCallbackPolicyRequest);
+        Map<String, String> headers = new HashMap<String, String>();
+        addRequestRequiredHeaders(headers, rawContent);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(setBucketCallbackPolicyRequest))
+                .setMethod(HttpMethod.PUT).setBucket(bucketName).setParameters(params)
+                .setInputSize(rawContent.length).setInputStream(new ByteArrayInputStream(rawContent))
+                .setOriginalRequest(setBucketCallbackPolicyRequest).build();
+
+        return doOperation(request, requestIdResponseParser, bucketName, null);
+    }
+
+    public GetBucketCallbackPolicyResult getBucketCallbackPolicy(GenericRequest genericRequest) throws OSSException, ClientException {
+        assertParameterNotNull(genericRequest, "genericRequest");
+
+        String bucketName = genericRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(SUBRESOURCE_POLICY, null);
+        params.put(SUBRESOURCE_COMP, SUBRESOURCE_CALLBACK);
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(genericRequest))
+                .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(genericRequest).build();
+        return doOperation(request, getBucketCallbackPolicyResponseParser, bucketName, null, true);
+    }
+
+    public VoidResult deleteBucketCallbackPolicy(GenericRequest genericRequest) throws OSSException, ClientException {
+
+        assertParameterNotNull(genericRequest, "genericRequest");
+
+        String bucketName = genericRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(SUBRESOURCE_POLICY, null);
+        params.put(SUBRESOURCE_COMP, SUBRESOURCE_CALLBACK);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(genericRequest))
+                .setMethod(HttpMethod.DELETE).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(genericRequest).build();
+
+        return doOperation(request, requestIdResponseParser, bucketName, null);
+    }
+
+    public VoidResult putBucketArchiveDirectRead(PutBucketArchiveDirectReadRequest putBucketArchiveDirectReadRequest) throws OSSException, ClientException {
+        assertParameterNotNull(putBucketArchiveDirectReadRequest, "putBucketArchiveDirectReadRequest");
+        String bucketName = putBucketArchiveDirectReadRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(ARCHIVE_DIRECT_READ, null);
+        byte[] rawContent = putBucketArchiveDirectReadRequestMarshaller.marshall(putBucketArchiveDirectReadRequest);
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.PUT).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(putBucketArchiveDirectReadRequest).setInputSize(rawContent.length).setInputStream(new ByteArrayInputStream(rawContent)).build();
+        return doOperation(request, requestIdResponseParser, bucketName, null, true);
+    }
+
+    public GetBucketArchiveDirectReadResult getBucketArchiveDirectRead(GenericRequest genericRequest) throws OSSException, ClientException {
+        assertParameterNotNull(genericRequest, "genericRequest");
+        String bucketName = genericRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(ARCHIVE_DIRECT_READ, null);
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(genericRequest).build();
+        return doOperation(request, getBucketArchiveDirectReadResponseParser, bucketName, null, true);
+    }
+
+    public VoidResult putBucketHttpsConfig(PutBucketHttpsConfigRequest putBucketHttpsConfigRequest) throws OSSException, ClientException {
+
+        assertParameterNotNull(putBucketHttpsConfigRequest, "putBucketHttpsConfigRequest");
+
+        String bucketName = putBucketHttpsConfigRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(HTTPS_CONFIG, null);
+
+        byte[] rawContent = putBucketHttpsConfigRequestMarshaller.marshall(putBucketHttpsConfigRequest);
+        Map<String, String> headers = new HashMap<String, String>();
+        addRequestRequiredHeaders(headers, rawContent);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(putBucketHttpsConfigRequest))
+                .setMethod(HttpMethod.PUT).setBucket(bucketName).setParameters(params)
+                .setInputSize(rawContent.length).setInputStream(new ByteArrayInputStream(rawContent))
+                .setOriginalRequest(putBucketHttpsConfigRequest).build();
+
+        return doOperation(request, requestIdResponseParser, bucketName, null, true);
+    }
+
+    public GetBucketHttpsConfigResult getBucketHttpsConfig(GenericRequest genericRequest) throws OSSException, ClientException {
+        assertParameterNotNull(genericRequest, "genericRequest");
+
+        String bucketName = genericRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(HTTPS_CONFIG, null);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(genericRequest))
+                .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(genericRequest).build();
+        return doOperation(request, getBucketHttpsConfigResponseParser, bucketName, null, true);
+    }
+
+    public VoidResult putPublicAccessBlock(PutPublicAccessBlockRequest putPublicAccessBlockRequest) throws OSSException, ClientException {
+        assertParameterNotNull(putPublicAccessBlockRequest, "putPublicAccessBlockRequest");
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(PUBLIC_ACCESS_BLOCK, null);
+
+        byte[] rawContent = putPublicAccessBlockRequestMarshaller.marshall(putPublicAccessBlockRequest);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(putPublicAccessBlockRequest))
+                .setMethod(HttpMethod.PUT).setParameters(params)
+                .setOriginalRequest(putPublicAccessBlockRequest).setInputSize(rawContent.length).setInputStream(new ByteArrayInputStream(rawContent)).build();
+
+        return doOperation(request, requestIdResponseParser, null, null, true);
+    }
+
+    public GetPublicAccessBlockResult getPublicAccessBlock(GenericRequest genericRequest) throws OSSException, ClientException {
+        assertParameterNotNull(genericRequest, "genericRequest");
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(PUBLIC_ACCESS_BLOCK, null);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(genericRequest))
+                .setMethod(HttpMethod.GET).setParameters(params)
+                .setOriginalRequest(genericRequest).build();
+
+        return doOperation(request, getPublicAccessBlockResponseParser, null, null, true);
+    }
+
+    public VoidResult deletePublicAccessBlock(GenericRequest genericRequest) throws OSSException, ClientException {
+        assertParameterNotNull(genericRequest, "genericRequest");
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(PUBLIC_ACCESS_BLOCK, null);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(genericRequest))
+                .setMethod(HttpMethod.DELETE).setParameters(params)
+                .setOriginalRequest(genericRequest).build();
+
+        return doOperation(request, requestIdResponseParser, null, null);
+    }
+
+    public VoidResult putBucketPublicAccessBlock(PutBucketPublicAccessBlockRequest putBucketPublicAccessBlockRequest) throws OSSException, ClientException {
+        assertParameterNotNull(putBucketPublicAccessBlockRequest, "putBucketPublicAccessBlockRequest");
+
+        String bucketName = putBucketPublicAccessBlockRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(PUBLIC_ACCESS_BLOCK, null);
+
+        byte[] rawContent = putBucketPublicAccessBlockRequestMarshaller.marshall(putBucketPublicAccessBlockRequest);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(putBucketPublicAccessBlockRequest))
+                .setMethod(HttpMethod.PUT).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(putBucketPublicAccessBlockRequest).setInputSize(rawContent.length).setInputStream(new ByteArrayInputStream(rawContent)).build();
+
+        return doOperation(request, requestIdResponseParser, bucketName, null, true);
+    }
+
+    public GetBucketPublicAccessBlockResult getBucketPublicAccessBlock(GenericRequest genericRequest) throws OSSException, ClientException {
+        assertParameterNotNull(genericRequest, "genericRequest");
+
+        String bucketName = genericRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(PUBLIC_ACCESS_BLOCK, null);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(genericRequest))
+                .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(genericRequest).build();
+
+        return doOperation(request, getBucketPublicAccessBlockResponseParser, bucketName, null, true);
+    }
+
+    public VoidResult deleteBucketPublicAccessBlock(GenericRequest genericRequest) throws OSSException, ClientException {
+        assertParameterNotNull(genericRequest, "genericRequest");
+        String bucketName = genericRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(PUBLIC_ACCESS_BLOCK, null);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(genericRequest))
+                .setMethod(HttpMethod.DELETE).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(genericRequest).build();
+
+        return doOperation(request, requestIdResponseParser, bucketName, null);
+    }
+
+    public GetBucketPolicyStatusResult getBucketPolicyStatus(GenericRequest genericRequest) throws OSSException, ClientException {
+        assertParameterNotNull(genericRequest, "genericRequest");
+
+        String bucketName = genericRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(POLICY_STATUS, null);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint(genericRequest))
+                .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(genericRequest).build();
+
+        return doOperation(request, getBucketPolicyStatusResponseParser, bucketName, null, true);
+    }
+
+    public CreateBucketDataRedundancyTransitionResult createBucketDataRedundancyTransition(CreateBucketDataRedundancyTransitionRequest createBucketDataRedundancyTransitionRequest) throws OSSException, ClientException {
+        assertParameterNotNull(createBucketDataRedundancyTransitionRequest, "createBucketDataRedundancyTransitionRequest");
+        assertParameterNotNull(createBucketDataRedundancyTransitionRequest.getTargetType(), "targetType");
+
+        String bucketName = createBucketDataRedundancyTransitionRequest.getBucketName();
+
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.REDUNDANCY_TRANSITION, null);
+        if (null != createBucketDataRedundancyTransitionRequest.getTargetType()) {
+            params.put(X_OSS_TARGET_REDUNDANCY_TYPE, createBucketDataRedundancyTransitionRequest.getTargetType().toString());
+        }
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.POST).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(createBucketDataRedundancyTransitionRequest)
+                .setInputSize(0).setInputStream(new ByteArrayInputStream(new byte[0]))
+                .build();
+
+        return doOperation(request, createBucketDataRedundancyTransitionResponseParser, bucketName, null, true);
+    }
+
+    public GetBucketDataRedundancyTransitionResult getBucketDataRedundancyTransition(GetBucketDataRedundancyTransitionRequest getBucketDataRedundancyTransitionRequest) throws OSSException, ClientException {
+        assertParameterNotNull(getBucketDataRedundancyTransitionRequest, "getBucketDataRedundancyTransitionRequest");
+        assertParameterNotNull(getBucketDataRedundancyTransitionRequest.getTaskId(), "taskId");
+
+        String bucketName = getBucketDataRedundancyTransitionRequest.getBucketName();
+
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.REDUNDANCY_TRANSITION, null);
+        if (null != getBucketDataRedundancyTransitionRequest.getTaskId()) {
+            params.put(X_OSS_REDUNDANCY_TRANSITION_TASK_ID, getBucketDataRedundancyTransitionRequest.getTaskId());
+        }
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(getBucketDataRedundancyTransitionRequest).build();
+
+        return doOperation(request, getBucketDataRedundancyTransitionResponseParser, bucketName, null, true);
+    }
+
+    public VoidResult deleteBucketDataRedundancyTransition(DeleteBucketDataRedundancyTransitionRequest deleteBucketDataRedundancyTransitionRequest) throws OSSException, ClientException {
+        assertParameterNotNull(deleteBucketDataRedundancyTransitionRequest, "deleteBucketDataRedundancyTransitionRequest");
+        assertParameterNotNull(deleteBucketDataRedundancyTransitionRequest.getTaskId(), "taskId");
+
+        String bucketName = deleteBucketDataRedundancyTransitionRequest.getBucketName();
+
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.REDUNDANCY_TRANSITION, null);
+        if (null != deleteBucketDataRedundancyTransitionRequest.getTaskId()) {
+            params.put(X_OSS_REDUNDANCY_TRANSITION_TASK_ID, deleteBucketDataRedundancyTransitionRequest.getTaskId());
+        }
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.DELETE).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(deleteBucketDataRedundancyTransitionRequest).build();
+
+        return doOperation(request, requestIdResponseParser, bucketName, null, true);
+    }
+
+    public ListUserDataRedundancyTransitionResult listUserDataRedundancyTransition(ListUserDataRedundancyTransitionRequest listUserDataRedundancyTransitionRequest) throws OSSException, ClientException {
+        assertParameterNotNull(listUserDataRedundancyTransitionRequest, "listUserDataRedundancyTransitionRequest");
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.REDUNDANCY_TRANSITION, null);
+        if (null != listUserDataRedundancyTransitionRequest.getMaxKeys()) {
+            params.put(MAX_KEYS, Integer.toString(listUserDataRedundancyTransitionRequest.getMaxKeys()));
+        }
+        if (null != listUserDataRedundancyTransitionRequest.getContinuationToken()) {
+            params.put(SUBRESOURCE_CONTINUATION_TOKEN, listUserDataRedundancyTransitionRequest.getContinuationToken());
+        }
+
+        GenericRequest gGenericRequest = new GenericRequest();
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.GET).setParameters(params).setOriginalRequest(gGenericRequest).build();
+
+        return doOperation(request, listUserDataRedundancyTransitionResponseParser, null, null, true);
+    }
+
+    public List<GetBucketDataRedundancyTransitionResult> listBucketDataRedundancyTransition(GenericRequest genericRequest) throws OSSException, ClientException {
+        assertParameterNotNull(genericRequest, "genericRequest");
+
+        String bucketName = genericRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.REDUNDANCY_TRANSITION, null);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(genericRequest).build();
+
+        return doOperation(request, listBucketDataRedundancyTransitionResponseParser, bucketName, null, true);
+    }
+
+    public CreateAccessPointResult createAccessPoint(CreateAccessPointRequest createAccessPointRequest) throws OSSException, ClientException {
+        assertParameterNotNull(createAccessPointRequest, "createAccessPointRequest");
+        assertParameterNotNull(createAccessPointRequest.getNetworkOrigin(), "networkOrigin");
+        assertParameterNotNull(createAccessPointRequest.getAccessPointName(), "accessPointName");
+
+        String bucketName = createAccessPointRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.SUBRESOURCE_ACCESS_POINT, null);
+
+        byte[] rawContent = createAccessPointRequestParser.marshall(createAccessPointRequest);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.PUT).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(createAccessPointRequest).setInputSize(rawContent.length).setInputStream(new ByteArrayInputStream(rawContent)).build();
+
+        return doOperation(request, createAccessPointResponseParser, bucketName, null, true);
+    }
+
+    public GetAccessPointResult getAccessPoint(GetAccessPointRequest getAccessPointRequest) throws OSSException, ClientException {
+        assertParameterNotNull(getAccessPointRequest, "getAccessPointRequest");
+        assertParameterNotNull(getAccessPointRequest.getAccessPointName(), "accessPointName");
+
+        String bucketName = getAccessPointRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> headers = new HashMap<String, String>();
+        headers.put(OSSHeaders.OSS_ACCESS_POINT_NAME, getAccessPointRequest.getAccessPointName());
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.SUBRESOURCE_ACCESS_POINT, null);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params).setHeaders(headers)
+                .setOriginalRequest(getAccessPointRequest).build();
+
+        return doOperation(request, getAccessPointResponseParser, bucketName, null, true);
+    }
+
+    public VoidResult deleteAccessPoint(DeleteAccessPointRequest deleteAccessPointRequest) throws OSSException, ClientException {
+        assertParameterNotNull(deleteAccessPointRequest, "deleteAccessPointRequest");
+        assertParameterNotNull(deleteAccessPointRequest.getAccessPointName(), "accessPointName");
+
+        String bucketName = deleteAccessPointRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> headers = new HashMap<String, String>();
+        headers.put(OSSHeaders.OSS_ACCESS_POINT_NAME, deleteAccessPointRequest.getAccessPointName());
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.SUBRESOURCE_ACCESS_POINT, null);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.DELETE).setBucket(bucketName).setParameters(params).setHeaders(headers)
+                .setOriginalRequest(deleteAccessPointRequest).build();
+
+        return doOperation(request, requestIdResponseParser, bucketName, null, true);
+    }
+
+    public VoidResult putAccessPointPolicy(PutAccessPointPolicyRequest putAccessPointPolicyRequest) throws OSSException, ClientException {
+        assertParameterNotNull(putAccessPointPolicyRequest, "putAccessPointPolicyRequest");
+        assertParameterNotNull(putAccessPointPolicyRequest.getAccessPointName(), "accessPointName");
+
+        String bucketName = putAccessPointPolicyRequest.getBucketName();
+
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> headers = new HashMap<String, String>();
+        headers.put(OSSHeaders.OSS_ACCESS_POINT_NAME, putAccessPointPolicyRequest.getAccessPointName());
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.SUBRESOURCE_ACCESS_POINT_POLICY, null);
+
+        byte[] rawContent = putAccessPointPolicyRequestParser.marshall(putAccessPointPolicyRequest);
+
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.PUT).setBucket(bucketName).setParameters(params).setHeaders(headers)
+                .setInputSize(rawContent.length).setInputStream(new ByteArrayInputStream(rawContent))
+                .setOriginalRequest(putAccessPointPolicyRequest).build();
+
+        return doOperation(request, requestIdResponseParser, bucketName, null, true);
+    }
+
+    public GetAccessPointPolicyResult getAccessPointPolicy(GetAccessPointPolicyRequest getAccessPointPolicyRequest) throws OSSException, ClientException {
+        assertParameterNotNull(getAccessPointPolicyRequest, "getAccessPointPolicyRequest");
+        assertParameterNotNull(getAccessPointPolicyRequest.getAccessPointName(), "accessPointName");
+
+        String bucketName = getAccessPointPolicyRequest.getBucketName();
+
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> headers = new HashMap<String, String>();
+        headers.put(OSSHeaders.OSS_ACCESS_POINT_NAME, getAccessPointPolicyRequest.getAccessPointName());
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.SUBRESOURCE_ACCESS_POINT_POLICY, null);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params).setHeaders(headers)
+                .setOriginalRequest(getAccessPointPolicyRequest).build();
+
+        return doOperation(request, getAccessPointPolicyResponseParser, bucketName, null, true);
+    }
+
+    public VoidResult deleteAccessPointPolicy(DeleteAccessPointPolicyRequest deleteAccessPointPolicyRequest) throws OSSException, ClientException {
+        assertParameterNotNull(deleteAccessPointPolicyRequest, "deleteAccessPointPolicyRequest");
+        assertParameterNotNull(deleteAccessPointPolicyRequest.getAccessPointName(), "accessPointName");
+
+        String bucketName = deleteAccessPointPolicyRequest.getBucketName();
+
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> headers = new HashMap<String, String>();
+        headers.put(OSSHeaders.OSS_ACCESS_POINT_NAME, deleteAccessPointPolicyRequest.getAccessPointName());
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.SUBRESOURCE_ACCESS_POINT_POLICY, null);
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.DELETE).setBucket(bucketName).setParameters(params).setHeaders(headers)
+                .setOriginalRequest(deleteAccessPointPolicyRequest).build();
+
+        return doOperation(request, requestIdResponseParser, bucketName, null, true);
+    }
+
+    public ListAccessPointsResult listAccessPoints(ListAccessPointsRequest listAccessPointsRequest) throws OSSException, ClientException {
+        assertParameterNotNull(listAccessPointsRequest, "listAccessPointsRequest");
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.SUBRESOURCE_ACCESS_POINT, null);
+        if (null != listAccessPointsRequest.getMaxKeys()) {
+            params.put(MAX_KEYS, Integer.toString(listAccessPointsRequest.getMaxKeys()));
+        }
+        if (null != listAccessPointsRequest.getContinuationToken()) {
+            params.put(SUBRESOURCE_CONTINUATION_TOKEN, listAccessPointsRequest.getContinuationToken());
+        }
+
+        GenericRequest gGenericRequest = new GenericRequest();
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.GET).setParameters(params).setOriginalRequest(gGenericRequest).build();
+
+        return doOperation(request, listAccessPointsResponseParser, null, null, true);
+    }
+
+    public ListAccessPointsResult listBucketAccessPoints(ListBucketAccessPointsRequest listBucketAccessPointsRequest) throws OSSException, ClientException {
+        assertParameterNotNull(listBucketAccessPointsRequest, "listBucketAccessPointsRequest");
+
+        String bucketName = listBucketAccessPointsRequest.getBucketName();
+        assertParameterNotNull(bucketName, "bucketName");
+        ensureBucketNameValid(bucketName);
+
+        Map<String, String> params = new HashMap<String, String>();
+        params.put(RequestParameters.SUBRESOURCE_ACCESS_POINT, null);
+        if (null != listBucketAccessPointsRequest.getMaxKeys()) {
+            params.put(MAX_KEYS, Integer.toString(listBucketAccessPointsRequest.getMaxKeys()));
+        }
+        if (null != listBucketAccessPointsRequest.getContinuationToken()) {
+            params.put(SUBRESOURCE_CONTINUATION_TOKEN, listBucketAccessPointsRequest.getContinuationToken());
+        }
+
+        RequestMessage request = new OSSRequestMessageBuilder(getInnerClient()).setEndpoint(getEndpoint())
+                .setMethod(HttpMethod.GET).setBucket(bucketName).setParameters(params)
+                .setOriginalRequest(listBucketAccessPointsRequest).build();
+
+        return doOperation(request, listAccessPointsResponseParser, bucketName, null, true);
+    }
+
 }
